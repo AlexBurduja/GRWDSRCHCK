@@ -292,18 +292,15 @@ async function fetchTableData(client, retry = true) {
     const tds = $row.find("td");
     const noteId = tds.eq(1).text().trim();
 
-    const style = $row.attr("style") || "";
-    const bgColor = style.replace(/\s+/g, '').toLowerCase();
-    const isYellow = bgColor.includes("background-color:rgb(255,243,205)") || bgColor.includes("#fff3cd");
+    const styleAttr = $row.attr("style")?.toLowerCase() || "";
+    const isYellow = styleAttr.includes("#fff3cd") || styleAttr.includes("background-color:rgb(255,243,205)");
 
-    notes.push({
-      id: noteId,
-      isYellow
-    });
+    notes.push({ id: noteId, isYellow });
   });
-
+  
+  console.log(notes);
   return notes;
-}
+}  
 
 
 async function checkNotes() {
