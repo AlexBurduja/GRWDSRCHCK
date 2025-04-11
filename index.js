@@ -314,14 +314,26 @@ async function checkNotes() {
   const newOnes = notes.filter((n) => !previousIds.includes(n.id));
   const disappeared = previousNotes.filter((n) => !currentIds.includes(n.id));
 
+  const yellowNow = notes.filter(n => n.isYellow).map(n => n.id);
+  const yellowBefore = previousNotes.filter(n => n.isYellow).map(n => n.id);
+
+  const turnedYellow = notes.filter(n => n.isYellow && !yellowBefore.includes(n.id));
+  const becameNormal = yellowBefore.filter(id => !yellowNow.includes(id));
+
   if (newOnes.length > 0) {
-    await sendTelegram(`📥 S-au adăugat ${newOnes.length} fișier(e):
-${newOnes.map((n) => n.id).join("\n")}`);
+    await sendTelegram(`📥 S-au adăugat ${newOnes.length} fișier(e):\n${newOnes.map((n) => n.isYellow ? `🟡 ${n.id}` : n.id).join("\n")}\n\nTotal: ${currentNoteCount}`);
   }
 
   if (disappeared.length > 0) {
-    await sendTelegram(`🗑️ Au dispărut ${disappeared.length} fișier(e):
-${disappeared.map((n) => n.id).join("\n")}`);
+    await sendTelegram(`🗑️ Au dispărut ${disappeared.length} fișier(e):\n${disappeared.map((n) => n.isYellow ? `🟡 ${n.id}` : n.id).join("\n")}\n\nTotal: ${currentNoteCount}`);
+  }
+
+  if (turnedYellow.length > 0) {
+    await sendTelegram(`🟡 ${turnedYellow.length} fișier(e) au devenit cu fundal galben:\n${turnedYellow.map(n => n.id).join("\n")}\n\nTotal: ${currentNoteCount}`);
+  }
+
+  if (becameNormal.length > 0) {
+    await sendTelegram(`✅ ${becameNormal.length} fișier(e) nu mai sunt galbene:\n${becameNormal.join("\n")}\n\nTotal: ${currentNoteCount}`);
   }
 
   previousNoteCount = currentNoteCount;
