@@ -316,14 +316,12 @@ async function checkNotes() {
 
   if (newOnes.length > 0) {
     await sendTelegram(`📥 S-au adăugat ${newOnes.length} fișier(e):
-${newOnes.map((n) => n.id).join("
-")}`);
+${newOnes.map((n) => n.id).join("\n")}`);
   }
 
   if (disappeared.length > 0) {
     await sendTelegram(`🗑️ Au dispărut ${disappeared.length} fișier(e):
-${disappeared.map((n) => n.id).join("
-")}`);
+${disappeared.map((n) => n.id).join("\n")}`);
   }
 
   previousNoteCount = currentNoteCount;
