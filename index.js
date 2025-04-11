@@ -1,11 +1,10 @@
-// index.js (Replit version with Telegram 2FA + secrets only — cookies in secrets)
-
 const axios = require("axios");
 const cheerio = require("cheerio");
 const qs = require("qs");
 const tough = require("tough-cookie");
 const { wrapper } = require("axios-cookiejar-support");
 const express = require("express");
+const fs = require("fs");
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -14,6 +13,7 @@ const LOGIN_URL = `${BASE_URL}/login.aspx`;
 const TARGET_URL = `${BASE_URL}/content/files/check/file_list_check_client.aspx`;
 const USERNAME = process.env.LOGIN_USERNAME;
 const PASSWORD = process.env.LOGIN_PASSWORD;
+const COOKIE_FILE = "./cookies.json";
 
 let previousNotes = [];
 let previousNoteCount = 0;
@@ -31,7 +31,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.send("Replit is alive!");
+  res.send("Botul este activ.");
 });
 
 app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
@@ -55,16 +55,10 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
       clearTimeout(timeoutHandle);
       saved2FACode = code;
       pending2FA = false;
-      await sendTelegram(
-        "🔐 Cod 2FA primit. Continuăm autentificarea...",
-        chatId,
-      );
+      await sendTelegram("🔐 Cod 2FA primit. Continuăm autentificarea...", chatId);
       resumeLoginAfter2FA(code);
     } else {
-      await sendTelegram(
-        "⚠️ Nu a fost solicitat un cod 2FA sau codul este invalid.",
-        chatId,
-      );
+      await sendTelegram("⚠️ Nu a fost solicitat un cod 2FA sau codul este invalid.", chatId);
     }
   }
 
@@ -77,10 +71,10 @@ app.listen(PORT, () => {
 
 async function sendTelegram(msg, chatId = TELEGRAM_CHAT_ID) {
   try {
-    await axios.post(
-      `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`,
-      { chat_id: chatId, text: msg },
-    );
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+      chat_id: chatId,
+      text: msg,
+    });
   } catch (error) {
     console.log("Error sending Telegram message:", error.message);
   }
@@ -88,18 +82,13 @@ async function sendTelegram(msg, chatId = TELEGRAM_CHAT_ID) {
 
 function saveCookies(jar) {
   const serialized = jar.serializeSync();
-  const encoded = Buffer.from(JSON.stringify(serialized)).toString("base64");
-  console.log(
-    "💾 Cookie salvat. Pune-l manual în Replit Secrets ca COOKIES_JSON=",
-  );
-  console.log(encoded);
+  fs.writeFileSync(COOKIE_FILE, JSON.stringify(serialized));
+  console.log("💾 Cookie salvat în cookies.json");
 }
 
 function loadCookies() {
-  if (!process.env["COOKIES_JSON"]) return new tough.CookieJar();
-  const raw = Buffer.from(process.env["COOKIES_JSON"], "base64").toString(
-    "utf8",
-  );
+  if (!fs.existsSync(COOKIE_FILE)) return new tough.CookieJar();
+  const raw = fs.readFileSync(COOKIE_FILE, "utf8");
   return tough.CookieJar.deserializeSync(JSON.parse(raw));
 }
 
@@ -111,15 +100,12 @@ async function login(force = false) {
   if (!force) {
     try {
       const test = await client.get(TARGET_URL);
-      if (
-        !test.data.includes("TextBoxPass") &&
-        !test.data.includes("Autentificare esuata")
-      ) {
+      if (!test.data.includes("TextBoxPass") && !test.data.includes("Autentificare esuata")) {
         console.log("✅ Folosim sesiunea salvată.");
         return { client };
       }
     } catch (e) {
-      console.warn("Warning: test GET failed, re-authenticating.", e.message);
+      console.warn("Test GET failed, relogin necesar.", e.message);
     }
   }
 
@@ -146,26 +132,16 @@ async function login(force = false) {
   });
 
   if (response.data.includes("TextBoxCode")) {
-    console.log(
-      "📩 Cod 2FA necesar – aștept introducerea lui prin Telegram...",
-    );
-    await sendTelegram(
-      "📩 Cod 2FA necesar. Trimite-l cu comanda: /2fa CODUL_TAU\n⚠️ Dacă nu trimiți codul în 10 minute, botul se va opri automat.",
-    );
+    console.log("📩 Cod 2FA necesar – aștept prin Telegram...");
+    await sendTelegram("📩 Cod 2FA necesar. Trimite cu: /2fa CODUL_TAU");
 
     pending2FA = true;
 
     return await new Promise((resolve, reject) => {
-      timeoutHandle = setTimeout(
-        async () => {
-          await sendTelegram(
-            "⏱️ Timpul de 10 minute pentru 2FA a expirat. Botul se va opri.",
-          );
-          console.error("⏱️ Timpul pentru 2FA a expirat. Oprire bot.");
-          process.exit(1);
-        },
-        10 * 60 * 1000,
-      );
+      timeoutHandle = setTimeout(async () => {
+        await sendTelegram("⏱️ Cod 2FA nu a fost primit în 10 minute. Botul se oprește.");
+        process.exit(1);
+      }, 10 * 60 * 1000);
 
       resumeLoginAfter2FA = async (code) => {
         const $$ = cheerio.load(response.data);
@@ -181,21 +157,17 @@ async function login(force = false) {
           ButtonLogin: "Autentificare",
         };
 
-        const finalResponse = await client.post(
-          LOGIN_URL,
-          qs.stringify(codePayload),
-          {
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-              Referer: LOGIN_URL,
-              Origin: BASE_URL,
-            },
+        const finalResponse = await client.post(LOGIN_URL, qs.stringify(codePayload), {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Referer: LOGIN_URL,
+            Origin: BASE_URL,
           },
-        );
+        });
 
         if (finalResponse.data.includes("TextBoxPass")) {
-          await sendTelegram("❌ Cod 2FA incorect sau autentificare eșuată.");
-          throw new Error("Autentificare eșuată după 2FA");
+          await sendTelegram("❌ Cod 2FA incorect.");
+          throw new Error("2FA greșit.");
         }
 
         clearTimeout(timeoutHandle);
@@ -206,23 +178,27 @@ async function login(force = false) {
     });
   }
 
-  if (response.data.includes("TextBoxPass"))
-    throw new Error("❌ Autentificare eșuată.");
+  if (response.data.includes("TextBoxPass")) throw new Error("❌ Autentificare eșuată.");
 
   console.log("✅ Autentificare reușită!");
   saveCookies(jar);
   return { client };
 }
 
-async function fetchTableData(client) {
+async function fetchTableData(client, retry = true) {
   const response = await client.get(TARGET_URL);
   const $ = cheerio.load(response.data);
 
-  const table = $(
-    "#ctl00_ContentPlaceHolderMain_TabContainer_MAIN_TabPanel_APPROVAL_LIST_GridViewApprovalList",
-  );
+  const table = $("#ctl00_ContentPlaceHolderMain_TabContainer_MAIN_TabPanel_APPROVAL_LIST_GridViewApprovalList");
+
   if (!table.length) {
-    console.log("❌ Table not found.");
+    console.warn("❌ Table not found.");
+    if (retry) {
+      console.log("🔁 Reîncercăm după login forțat...");
+      const result = await login(true);
+      globalClient = result.client;
+      return await fetchTableData(globalClient, false);
+    }
     return [];
   }
 
@@ -238,6 +214,7 @@ async function fetchTableData(client) {
       isYellow: bg.includes("#FFF3CD") || bg.includes("rgb(255, 243, 205)"),
     });
   });
+
   return notes;
 }
 
@@ -246,7 +223,7 @@ async function checkNotes() {
 
   const notes = await fetchTableData(globalClient);
   const currentNoteCount = notes.length;
-  console.log(`🧾 Detected notes: ${currentNoteCount}`);
+  console.log(`🧾 Fișiere detectate: ${currentNoteCount}`);
 
   const currentIds = notes.map((n) => n.id);
   const previousIds = previousNotes.map((n) => n.id);
@@ -256,13 +233,13 @@ async function checkNotes() {
 
   if (newOnes.length > 0) {
     await sendTelegram(
-      `📥 S-au adăugat ${newOnes.length} fișier(e):\n${newOnes.map((n) => n.id).join("\n")}`,
+      `📥 S-au adăugat ${newOnes.length} fișier(e):\n${newOnes.map((n) => n.id).join("\n")}`
     );
   }
 
   if (disappeared.length > 0) {
     await sendTelegram(
-      `🗑️ Au dispărut ${disappeared.length} fișier(e):\n${disappeared.map((n) => n.id).join("\n")}`,
+      `🗑️ Au dispărut ${disappeared.length} fișier(e):\n${disappeared.map((n) => n.id).join("\n")}`
     );
   }
 
