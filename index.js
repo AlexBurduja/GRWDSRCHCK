@@ -334,8 +334,7 @@ ${disappeared.map((n) => n.id).join("\n")}`);
     console.log("🔁 Monitor activ.");
     await checkNotes();
     setInterval(async () => {
-      console.log("
-⏰ Verificare periodică...");
+      console.log("⏰ Verificare periodică...");
       await checkNotes();
     }, 60_000);
   } catch (err) {
