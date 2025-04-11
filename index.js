@@ -1,4 +1,5 @@
 // index.js — COMPLET cu integrare Gist și funcționalitățile originale
+require("dotenv").config();
 
 const axios = require("axios");
 const cheerio = require("cheerio");
@@ -292,15 +293,15 @@ async function fetchTableData(client, retry = true) {
     const tds = $row.find("td");
     const noteId = tds.eq(1).text().trim();
 
-    const styleAttr = $row.attr("style")?.toLowerCase() || "";
-    const isYellow = styleAttr.includes("#fff3cd") || styleAttr.includes("background-color:rgb(255,243,205)");
+    const bgcolorAttr = $row.attr("bgcolor")?.toLowerCase() || "";
+    const isYellow = bgcolorAttr === "#fff3cd";
 
     notes.push({ id: noteId, isYellow });
   });
-  
-  console.log(notes);
+
   return notes;
-}  
+};
+
 
 
 async function checkNotes() {
