@@ -1,4 +1,4 @@
-// index.js — versiunea completă actualizată
+// index.js — COMPLET cu integrare Gist și funcționalitățile originale
 
 const axios = require("axios");
 const cheerio = require("cheerio");
@@ -15,6 +15,8 @@ const LOGIN_URL = `${BASE_URL}/login.aspx`;
 const TARGET_URL = `${BASE_URL}/content/files/check/file_list_check_client.aspx`;
 const USERNAME = process.env.LOGIN_USERNAME;
 const PASSWORD = process.env.LOGIN_PASSWORD;
+const GIST_ID = process.env.GIST_ID;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 const COOKIE_FILE = "./cookies.json";
 const META_FILE = "./cookie_meta.json";
@@ -99,6 +101,44 @@ async function sendTelegram(msg, chatId = TELEGRAM_CHAT_ID) {
   }
 }
 
+async function uploadToGist(content) {
+  if (!GIST_ID || !GITHUB_TOKEN) return;
+  try {
+    await axios.patch(
+      `https://api.github.com/gists/${GIST_ID}`,
+      {
+        files: {
+          "cookies.json": { content },
+        },
+      },
+      {
+        headers: {
+          Authorization: `token ${GITHUB_TOKEN}`,
+        },
+      }
+    );
+    console.log("📤 Cookie uploadat în GitHub Gist!");
+  } catch (err) {
+    console.error("❌ Eroare la upload în Gist:", err.message);
+  }
+}
+
+async function downloadFromGist() {
+  if (!GIST_ID || !GITHUB_TOKEN) return null;
+  try {
+    const res = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: { Authorization: `token ${GITHUB_TOKEN}` },
+    });
+    const content = res.data.files["cookies.json"].content;
+    fs.writeFileSync(COOKIE_FILE, content);
+    console.log("📥 Cookie descărcat din GitHub Gist!");
+    return tough.CookieJar.deserializeSync(JSON.parse(content));
+  } catch (err) {
+    console.error("❌ Eroare la descărcare din Gist:", err.message);
+    return new tough.CookieJar();
+  }
+}
+
 function loadCookies() {
   if (fs.existsSync(COOKIE_FILE)) {
     console.log("🍪 Cookie încărcat din cookies.json");
@@ -113,8 +153,8 @@ function loadCookies() {
     return tough.CookieJar.deserializeSync(JSON.parse(raw));
   }
 
-  console.log("⚠️ Niciun cookie găsit. Se va cere 2FA.");
-  return new tough.CookieJar();
+  console.log("🔍 Încercăm descărcarea din Gist...");
+  return downloadFromGist();
 }
 
 async function saveCookies(jar) {
@@ -129,11 +169,14 @@ async function saveCookies(jar) {
   fs.writeFileSync(META_FILE, JSON.stringify({ loginDate: now }));
   console.log("🗓️ Dată 2FA salvată:", now);
 
-  await sendTelegram(`📦 Cookie a fost regenerat după login 2FA.\n(opțional: dacă vrei să persiști sesiunea între redeploy-uri, poți salva asta ca secret în Railway)\n\nCOOKIES_JSON=${encoded}`);
+  await uploadToGist(raw);
+  await sendTelegram(`📦 Cookie regenerat după 2FA. A fost sincronizat automat în Gist.`);
 }
 
+// LOGIN + FETCH + CHECK FUNCTIONS
+
 async function login(force = false) {
-  const jar = loadCookies();
+  const jar = await loadCookies();
   globalCookieJar = jar;
   const client = wrapper(axios.create({ jar, withCredentials: true }));
 
@@ -145,7 +188,7 @@ async function login(force = false) {
         return { client };
       }
     } catch (e) {
-      console.warn("Test GET failed, relogin necesar.", e.message);
+      console.warn("⚠️ Test GET a eșuat. Relogin necesar.", e.message);
     }
   }
 
@@ -186,12 +229,12 @@ async function login(force = false) {
       resumeLoginAfter2FA = async (code) => {
         const $$ = cheerio.load(response.data);
         const codePayload = {
-          __VIEWSTATE: $$("input#__VIEWSTATE").val(),
-          __VIEWSTATEGENERATOR: $$("input#__VIEWSTATEGENERATOR").val(),
-          __EVENTVALIDATION: $$("input#__EVENTVALIDATION").val(),
+          __VIEWSTATE: $$('input#__VIEWSTATE').val(),
+          __VIEWSTATEGENERATOR: $$('input#__VIEWSTATEGENERATOR').val(),
+          __EVENTVALIDATION: $$('input#__EVENTVALIDATION').val(),
           __EVENTTARGET: "",
           __EVENTARGUMENT: "",
-          Hidden_ClientJS: $$("input#Hidden_ClientJS").val() || "",
+          Hidden_ClientJS: $$('input#Hidden_ClientJS').val() || "",
           TextBoxCode: code,
           CheckBoxDevice: "on",
           ButtonLogin: "Autentificare",
@@ -206,8 +249,8 @@ async function login(force = false) {
         });
 
         if (finalResponse.data.includes("TextBoxPass")) {
-          await sendTelegram("❌ Cod 2FA incorect.");
-          throw new Error("2FA greșit.");
+          await sendTelegram("❌ Cod 2FA incorect sau autentificare eșuată.");
+          throw new Error("Autentificare eșuată după 2FA");
         }
 
         clearTimeout(timeoutHandle);
@@ -230,7 +273,6 @@ async function fetchTableData(client, retry = true) {
   const $ = cheerio.load(response.data);
 
   const table = $("#ctl00_ContentPlaceHolderMain_TabContainer_MAIN_TabPanel_APPROVAL_LIST_GridViewApprovalList");
-
   if (!table.length) {
     console.warn("❌ Table not found.");
     if (retry) {
@@ -273,24 +315,29 @@ async function checkNotes() {
   const disappeared = previousNotes.filter((n) => !currentIds.includes(n.id));
 
   if (newOnes.length > 0) {
-    await sendTelegram(`📥 S-au adăugat ${newOnes.length} fișier(e):\n${newOnes.map((n) => n.id).join("\n")}`);
+    await sendTelegram(`📥 S-au adăugat ${newOnes.length} fișier(e):
+${newOnes.map((n) => n.id).join("
+")}`);
   }
 
   if (disappeared.length > 0) {
-    await sendTelegram(`🗑️ Au dispărut ${disappeared.length} fișier(e):\n${disappeared.map((n) => n.id).join("\n")}`);
+    await sendTelegram(`🗑️ Au dispărut ${disappeared.length} fișier(e):
+${disappeared.map((n) => n.id).join("
+")}`);
   }
 
   previousNoteCount = currentNoteCount;
   previousNotes = notes;
 }
 
-// Execută monitorizarea la pornire
+// START MONITORING
 (async () => {
   try {
     console.log("🔁 Monitor activ.");
     await checkNotes();
     setInterval(async () => {
-      console.log("\n⏰ Verificare periodică...");
+      console.log("
+⏰ Verificare periodică...");
       await checkNotes();
     }, 60_000);
   } catch (err) {
