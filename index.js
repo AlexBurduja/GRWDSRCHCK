@@ -30,7 +30,7 @@ let globalClient = null;
 let globalCookieJar = null;
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
@@ -131,3 +131,17 @@ async function saveCookies(jar) {
 
   await sendTelegram(`📦 Cookie a fost regenerat după login 2FA.\n(opțional: dacă vrei să persiști sesiunea între redeploy-uri, poți salva asta ca secret în Railway)\n\nCOOKIES_JSON=${encoded}`);
 }
+
+// Execută monitorizarea la pornire
+(async () => {
+  try {
+    console.log("🔁 Monitor activ.");
+    await checkNotes();
+    setInterval(async () => {
+      console.log("\n⏰ Verificare periodică...");
+      await checkNotes();
+    }, 60_000);
+  } catch (err) {
+    console.error("💥 Eroare la monitorizare:", err.message);
+  }
+})();
