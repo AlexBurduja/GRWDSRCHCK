@@ -288,17 +288,23 @@ async function fetchTableData(client, retry = true) {
   const notes = [];
 
   rows.each((_, row) => {
-    const tds = $(row).find("td");
+    const $row = $(row);
+    const tds = $row.find("td");
     const noteId = tds.eq(1).text().trim();
-    const bg = $(row).attr("style") || "";
+
+    const style = $row.attr("style") || "";
+    const bgColor = style.replace(/\s+/g, '').toLowerCase();
+    const isYellow = bgColor.includes("background-color:rgb(255,243,205)") || bgColor.includes("#fff3cd");
+
     notes.push({
       id: noteId,
-      isYellow: bg.includes("#FFF3CD") || bg.includes("rgb(255, 243, 205)"),
+      isYellow
     });
   });
 
   return notes;
 }
+
 
 async function checkNotes() {
   console.log("🧠 Pornire checkNotes()...");
