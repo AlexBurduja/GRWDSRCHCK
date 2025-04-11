@@ -30,7 +30,7 @@ let globalClient = null;
 let globalCookieJar = null;
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
@@ -130,6 +130,158 @@ async function saveCookies(jar) {
   console.log("🗓️ Dată 2FA salvată:", now);
 
   await sendTelegram(`📦 Cookie a fost regenerat după login 2FA.\n(opțional: dacă vrei să persiști sesiunea între redeploy-uri, poți salva asta ca secret în Railway)\n\nCOOKIES_JSON=${encoded}`);
+}
+
+async function login(force = false) {
+  const jar = loadCookies();
+  globalCookieJar = jar;
+  const client = wrapper(axios.create({ jar, withCredentials: true }));
+
+  if (!force) {
+    try {
+      const test = await client.get(TARGET_URL);
+      if (!test.data.includes("TextBoxPass") && !test.data.includes("Autentificare esuata")) {
+        console.log("✅ Folosim sesiunea salvată.");
+        return { client };
+      }
+    } catch (e) {
+      console.warn("Test GET failed, relogin necesar.", e.message);
+    }
+  }
+
+  const loginPage = await client.get(LOGIN_URL);
+  let $ = cheerio.load(loginPage.data);
+  const payload = {
+    __VIEWSTATE: $("#__VIEWSTATE").val(),
+    __VIEWSTATEGENERATOR: $("#__VIEWSTATEGENERATOR").val(),
+    __EVENTVALIDATION: $("#__EVENTVALIDATION").val(),
+    __EVENTTARGET: "",
+    __EVENTARGUMENT: "",
+    Hidden_ClientJS: $("#Hidden_ClientJS").val() || "",
+    TextBoxUser: USERNAME,
+    TextBoxPass: PASSWORD,
+    ButtonLogin: "Autentificare",
+  };
+
+  let response = await client.post(LOGIN_URL, qs.stringify(payload), {
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Referer: LOGIN_URL,
+      Origin: BASE_URL,
+    },
+  });
+
+  if (response.data.includes("TextBoxCode")) {
+    console.log("📩 Cod 2FA necesar – aștept prin Telegram...");
+    await sendTelegram("📩 Cod 2FA necesar. Trimite-l cu comanda: /2fa CODUL_TAU");
+
+    pending2FA = true;
+
+    return await new Promise((resolve, reject) => {
+      timeoutHandle = setTimeout(async () => {
+        await sendTelegram("⏱️ Timpul de 10 minute pentru 2FA a expirat. Botul se va opri.");
+        process.exit(1);
+      }, 10 * 60 * 1000);
+
+      resumeLoginAfter2FA = async (code) => {
+        const $$ = cheerio.load(response.data);
+        const codePayload = {
+          __VIEWSTATE: $$("input#__VIEWSTATE").val(),
+          __VIEWSTATEGENERATOR: $$("input#__VIEWSTATEGENERATOR").val(),
+          __EVENTVALIDATION: $$("input#__EVENTVALIDATION").val(),
+          __EVENTTARGET: "",
+          __EVENTARGUMENT: "",
+          Hidden_ClientJS: $$("input#Hidden_ClientJS").val() || "",
+          TextBoxCode: code,
+          CheckBoxDevice: "on",
+          ButtonLogin: "Autentificare",
+        };
+
+        const finalResponse = await client.post(LOGIN_URL, qs.stringify(codePayload), {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Referer: LOGIN_URL,
+            Origin: BASE_URL,
+          },
+        });
+
+        if (finalResponse.data.includes("TextBoxPass")) {
+          await sendTelegram("❌ Cod 2FA incorect.");
+          throw new Error("2FA greșit.");
+        }
+
+        clearTimeout(timeoutHandle);
+        await sendTelegram("✅ Autentificare reușită după 2FA!");
+        saveCookies(jar);
+        resolve({ client });
+      };
+    });
+  }
+
+  if (response.data.includes("TextBoxPass")) throw new Error("❌ Autentificare eșuată.");
+
+  console.log("✅ Autentificare reușită!");
+  saveCookies(jar);
+  return { client };
+}
+
+async function fetchTableData(client, retry = true) {
+  const response = await client.get(TARGET_URL);
+  const $ = cheerio.load(response.data);
+
+  const table = $("#ctl00_ContentPlaceHolderMain_TabContainer_MAIN_TabPanel_APPROVAL_LIST_GridViewApprovalList");
+
+  if (!table.length) {
+    console.warn("❌ Table not found.");
+    if (retry) {
+      console.log("🔁 Reîncercăm după login forțat...");
+      const result = await login(true);
+      globalClient = result.client;
+      return await fetchTableData(globalClient, false);
+    }
+    return [];
+  }
+
+  const rows = table.find("tr").slice(1);
+  const notes = [];
+
+  rows.each((_, row) => {
+    const tds = $(row).find("td");
+    const noteId = tds.eq(1).text().trim();
+    const bg = $(row).attr("style") || "";
+    notes.push({
+      id: noteId,
+      isYellow: bg.includes("#FFF3CD") || bg.includes("rgb(255, 243, 205)"),
+    });
+  });
+
+  return notes;
+}
+
+async function checkNotes() {
+  console.log("🧠 Pornire checkNotes()...");
+  if (!globalClient) globalClient = (await login()).client;
+
+  const notes = await fetchTableData(globalClient);
+  const currentNoteCount = notes.length;
+  console.log(`🧾 Fișiere detectate: ${currentNoteCount}`);
+
+  const currentIds = notes.map((n) => n.id);
+  const previousIds = previousNotes.map((n) => n.id);
+
+  const newOnes = notes.filter((n) => !previousIds.includes(n.id));
+  const disappeared = previousNotes.filter((n) => !currentIds.includes(n.id));
+
+  if (newOnes.length > 0) {
+    await sendTelegram(`📥 S-au adăugat ${newOnes.length} fișier(e):\n${newOnes.map((n) => n.id).join("\n")}`);
+  }
+
+  if (disappeared.length > 0) {
+    await sendTelegram(`🗑️ Au dispărut ${disappeared.length} fișier(e):\n${disappeared.map((n) => n.id).join("\n")}`);
+  }
+
+  previousNoteCount = currentNoteCount;
+  previousNotes = notes;
 }
 
 // Execută monitorizarea la pornire
