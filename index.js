@@ -74,20 +74,45 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
   }
 
   if (text === "/check") {
-    if (fs.existsSync(META_FILE)) {
-      const meta = JSON.parse(fs.readFileSync(META_FILE, "utf8"));
-      console.log(meta);
-      const loginDate = new Date(meta.loginDate);
-      const now = new Date();
-      const diffMs = now - loginDate;
-      const daysPassed = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      const daysLeft = Math.max(0, 30 - daysPassed);
-
-      await sendTelegram(`📅 Cod 2FA folosit acum ${daysPassed} zile.\n⏳ Mai sunt ${daysLeft} zile până expiră.`, chatId);
+    let response = "";
+  
+    if (fs.existsSync(COOKIE_FILE)) {
+      const raw = fs.readFileSync(COOKIE_FILE, "utf8");
+      try {
+        const jarData = JSON.parse(raw);
+        const cookies = jarData.cookies;
+  
+        const cookie2FA = cookies.find(c => c.key === "2faKey");
+  
+        if (cookie2FA && cookie2FA.creation && cookie2FA.expires) {
+          const created = new Date(cookie2FA.creation);
+          const expires = new Date(cookie2FA.expires);
+          const now = new Date();
+  
+          const daysPassed = Math.floor((now - created) / (1000 * 60 * 60 * 24));
+          const daysLeft = Math.ceil((expires - now) / (1000 * 60 * 60 * 24));
+  
+          response += `📅 Cookie creat pe: ${created.toLocaleDateString()}.\n`;
+          response += `⏳ Expiră pe: ${expires.toLocaleDateString()}.\n`;
+          response += `🕰️ Au trecut ${daysPassed} zile de la creare.\n`;
+          response += `✅ Mai sunt ${daysLeft} zile până expiră.`;
+  
+          if (daysLeft <= 5) {
+            response += `\n⚠️ ATENȚIE: Mai puțin de ${daysLeft} zile până expiră cookie-ul!`;
+          }
+        } else {
+          response = "⚠️ Nu s-a găsit cookie-ul 2FA sau lipsește data.";
+        }
+      } catch (e) {
+        response = "❌ Eroare la citirea fișierului cookies.json.";
+      }
     } else {
-      await sendTelegram("⚠️ Nu există informații despre 2FA. Probabil urmează autentificarea.", chatId);
+      response = "⚠️ Fișierul cookies.json nu există.";
     }
+  
+    await sendTelegram(response, chatId);
   }
+  
 
   if (text.startsWith("/2fa ")) {
     const code = text.split(" ")[1];
