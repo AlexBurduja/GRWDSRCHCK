@@ -53,7 +53,23 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
   }
 
   if (text === "/status") {
-    await sendTelegram(`📊 Fișiere detectate: ${previousNoteCount}`, chatId);
+  const total = previousNotes.length;
+
+  const galbene = previousNotes.filter(n => n.isYellow);
+  const verzi = previousNotes.filter(n => !n.isYellow);
+
+  let message = `📊 Fișiere detectate:\n\n`;
+
+  if (verzi.length > 0) {
+    message += `✅ Verzi (${verzi.length}):\n${verzi.map(n => n.id).join("\n")}\n\n`;
+  }
+
+  if (galbene.length > 0) {
+    message += `🟡 Galbene (${galbene.length}):\n${galbene.map(n => n.id).join("\n")}\n\n`;
+  }
+
+  message += `📦 Total: ${total}`;
+  await sendTelegram(message, chatId);
   }
 
   if (text === "/check") {
