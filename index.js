@@ -22,6 +22,7 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const COOKIE_FILE = "./cookies.json";
 const META_FILE = "./cookie_meta.json";
 
+
 let previousNotes = [];
 let previousNoteCount = 0;
 let pending2FA = false;
@@ -75,6 +76,7 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
   if (text === "/check") {
     if (fs.existsSync(META_FILE)) {
       const meta = JSON.parse(fs.readFileSync(META_FILE, "utf8"));
+      console.log(meta);
       const loginDate = new Date(meta.loginDate);
       const now = new Date();
       const diffMs = now - loginDate;
