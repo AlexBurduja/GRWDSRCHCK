@@ -17,6 +17,7 @@ const TARGET_URL = `${BASE_URL}/content/files/check/file_list_check_client.aspx`
 const USERNAME = process.env.LOGIN_USERNAME;
 const PASSWORD = process.env.LOGIN_PASSWORD;
 const GIST_ID = process.env.GIST_ID;
+const GIST_ID_NOTES = process.env.GIST_ID_NOTES
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 const COOKIE_FILE = "./cookies.json";
