@@ -1,4 +1,4 @@
-// index.js — COMPLET cu integrare Gist și funcționalitățile originale
+// index.js — COMPLET cu retry, timeout, salvare persistentă și filtrare mesaje duble
 require("dotenv").config();
 
 const axios = require("axios");
@@ -21,6 +21,7 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 const COOKIE_FILE = "./cookies.json";
 const META_FILE = "./cookie_meta.json";
+const NOTES_FILE = "./previous_notes.json";
 
 let previousNotes = [];
 let previousNoteCount = 0;
@@ -41,71 +42,33 @@ app.get("/", (req, res) => {
   res.send("Botul este activ.");
 });
 
-app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
-  const message = req.body.message;
-  if (!message || !message.text) return res.sendStatus(200);
-
-  const chatId = message.chat.id;
-  const text = message.text.trim();
-
-  if (text === "/test") {
-    await sendTelegram("✅ Botul funcționează corect!", chatId);
-  }
-
-  if (text === "/status") {
-  const total = previousNotes.length;
-
-  const galbene = previousNotes.filter(n => n.isYellow);
-  const verzi = previousNotes.filter(n => !n.isYellow);
-
-  let message = `📊 Fișiere detectate:\n\n`;
-
-  if (verzi.length > 0) {
-    message += `✅ Verzi (${verzi.length}):\n${verzi.map(n => n.id).join("\n")}\n\n`;
-  }
-
-  if (galbene.length > 0) {
-    message += `🟡 Galbene (${galbene.length}):\n${galbene.map(n => n.id).join("\n")}\n\n`;
-  }
-
-  message += `📦 Total: ${total}`;
-  await sendTelegram(message, chatId);
-  }
-
-  if (text === "/check") {
-    if (fs.existsSync(META_FILE)) {
-      const meta = JSON.parse(fs.readFileSync(META_FILE, "utf8"));
-      const loginDate = new Date(meta.loginDate);
-      const now = new Date();
-      const diffMs = now - loginDate;
-      const daysPassed = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      const daysLeft = Math.max(0, 30 - daysPassed);
-
-      await sendTelegram(`📅 Cod 2FA folosit acum ${daysPassed} zile.\n⏳ Mai sunt ${daysLeft} zile până expiră.`, chatId);
-    } else {
-      await sendTelegram("⚠️ Nu există informații despre 2FA. Probabil urmează autentificarea.", chatId);
+// retry helper
+async function withRetry(fn, retries = 3, delay = 5000) {
+  for (let i = 1; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i === retries) throw err;
+      console.warn(`⚠️ Retry ${i} eșuat: ${err.message}. Reîncercăm în ${delay / 1000}s...`);
+      await new Promise(res => setTimeout(res, delay));
     }
   }
+}
 
-  if (text.startsWith("/2fa ")) {
-    const code = text.split(" ")[1];
-    if (code && resumeLoginAfter2FA) {
-      clearTimeout(timeoutHandle);
-      saved2FACode = code;
-      pending2FA = false;
-      await sendTelegram("🔐 Cod 2FA primit. Continuăm autentificarea...", chatId);
-      resumeLoginAfter2FA(code);
-    } else {
-      await sendTelegram("⚠️ Nu a fost solicitat un cod 2FA sau codul este invalid.", chatId);
+function savePreviousNotes(notes) {
+  fs.writeFileSync(NOTES_FILE, JSON.stringify(notes, null, 2));
+}
+
+function loadPreviousNotes() {
+  if (fs.existsSync(NOTES_FILE)) {
+    try {
+      return JSON.parse(fs.readFileSync(NOTES_FILE, "utf8"));
+    } catch (e) {
+      console.error("❌ Eroare la citirea previous_notes.json:", e.message);
     }
   }
-
-  res.sendStatus(200);
-});
-
-app.listen(PORT, () => {
-  console.log(`Express server is running on port ${PORT}`);
-});
+  return [];
+}
 
 async function sendTelegram(msg, chatId = TELEGRAM_CHAT_ID) {
   try {
@@ -116,6 +79,24 @@ async function sendTelegram(msg, chatId = TELEGRAM_CHAT_ID) {
   } catch (error) {
     console.log("Error sending Telegram message:", error.message);
   }
+}
+
+function loadCookies() {
+  if (fs.existsSync(COOKIE_FILE)) {
+    console.log("🍪 Cookie încărcat din cookies.json");
+    const raw = fs.readFileSync(COOKIE_FILE, "utf8");
+    return tough.CookieJar.deserializeSync(JSON.parse(raw));
+  }
+
+  if (process.env.COOKIES_JSON) {
+    console.log("📦 Cookie încărcat din env (COOKIES_JSON)");
+    const raw = Buffer.from(process.env.COOKIES_JSON, "base64").toString("utf8");
+    fs.writeFileSync(COOKIE_FILE, raw);
+    return tough.CookieJar.deserializeSync(JSON.parse(raw));
+  }
+
+  console.log("🔍 Încercăm descărcarea din Gist...");
+  return downloadFromGist();
 }
 
 async function uploadToGist(content) {
@@ -156,24 +137,6 @@ async function downloadFromGist() {
   }
 }
 
-function loadCookies() {
-  if (fs.existsSync(COOKIE_FILE)) {
-    console.log("🍪 Cookie încărcat din cookies.json");
-    const raw = fs.readFileSync(COOKIE_FILE, "utf8");
-    return tough.CookieJar.deserializeSync(JSON.parse(raw));
-  }
-
-  if (process.env.COOKIES_JSON) {
-    console.log("📦 Cookie încărcat din env (COOKIES_JSON)");
-    const raw = Buffer.from(process.env.COOKIES_JSON, "base64").toString("utf8");
-    fs.writeFileSync(COOKIE_FILE, raw);
-    return tough.CookieJar.deserializeSync(JSON.parse(raw));
-  }
-
-  console.log("🔍 Încercăm descărcarea din Gist...");
-  return downloadFromGist();
-}
-
 async function saveCookies(jar) {
   const serialized = jar.serializeSync();
   const raw = JSON.stringify(serialized);
@@ -190,12 +153,14 @@ async function saveCookies(jar) {
   await sendTelegram(`📦 Cookie regenerat după 2FA. A fost sincronizat automat în Gist.`);
 }
 
-// LOGIN + FETCH + CHECK FUNCTIONS
-
 async function login(force = false) {
   const jar = await loadCookies();
   globalCookieJar = jar;
-  const client = wrapper(axios.create({ jar, withCredentials: true }));
+  const client = wrapper(axios.create({
+    jar,
+    withCredentials: true,
+    timeout: 10000,
+  }));
 
   if (!force) {
     try {
@@ -246,12 +211,12 @@ async function login(force = false) {
       resumeLoginAfter2FA = async (code) => {
         const $$ = cheerio.load(response.data);
         const codePayload = {
-          __VIEWSTATE: $$('input#__VIEWSTATE').val(),
-          __VIEWSTATEGENERATOR: $$('input#__VIEWSTATEGENERATOR').val(),
-          __EVENTVALIDATION: $$('input#__EVENTVALIDATION').val(),
+          __VIEWSTATE: $$("#__VIEWSTATE").val(),
+          __VIEWSTATEGENERATOR: $$("#__VIEWSTATEGENERATOR").val(),
+          __EVENTVALIDATION: $$("#__EVENTVALIDATION").val(),
           __EVENTTARGET: "",
           __EVENTARGUMENT: "",
-          Hidden_ClientJS: $$('input#Hidden_ClientJS').val() || "",
+          Hidden_ClientJS: $$("#Hidden_ClientJS").val() || "",
           TextBoxCode: code,
           CheckBoxDevice: "on",
           ButtonLogin: "Autentificare",
@@ -316,18 +281,18 @@ async function fetchTableData(client, retry = true) {
   });
 
   return notes;
-};
+}
 
-
-
+// checkNotes cu retry
 async function checkNotes() {
   console.log("🧠 Pornire checkNotes()...");
   if (!globalClient) globalClient = (await login()).client;
 
-  const notes = await fetchTableData(globalClient);
+  const notes = await withRetry(() => fetchTableData(globalClient), 3, 10000);
   const currentNoteCount = notes.length;
   console.log(`🧾 Fișiere detectate: ${currentNoteCount}`);
 
+  previousNotes = loadPreviousNotes();
   const currentIds = notes.map((n) => n.id);
   const previousIds = previousNotes.map((n) => n.id);
 
@@ -337,7 +302,7 @@ async function checkNotes() {
   const yellowNow = notes.filter(n => n.isYellow).map(n => n.id);
   const yellowBefore = previousNotes.filter(n => n.isYellow).map(n => n.id);
 
-  const turnedYellow = notes.filter(n => n.isYellow && !yellowBefore.includes(n.id));
+  const turnedYellow = notes.filter(n => n.isYellow && !yellowBefore.includes(n.id) && previousIds.includes(n.id));
   const becameNormal = yellowBefore.filter(id => !yellowNow.includes(id));
 
   if (newOnes.length > 0) {
@@ -358,18 +323,24 @@ async function checkNotes() {
 
   previousNoteCount = currentNoteCount;
   previousNotes = notes;
+  savePreviousNotes(notes);
 }
 
-// START MONITORING
+// START MONITORING - modificat
 (async () => {
+  console.log("🔁 Monitor activ.");
   try {
-    console.log("🔁 Monitor activ.");
     await checkNotes();
-    setInterval(async () => {
+  } catch (err) {
+    console.error("💥 Eroare inițială:", err.message);
+  }
+
+  setInterval(async () => {
+    try {
       console.log("⏰ Verificare periodică...");
       await checkNotes();
-    }, 60_000);
-  } catch (err) {
-    console.error("💥 Eroare la monitorizare:", err.message);
-  }
+    } catch (err) {
+      console.error("💥 Eroare la verificarea periodică:", err.message);
+    }
+  }, 60_000);
 })();
