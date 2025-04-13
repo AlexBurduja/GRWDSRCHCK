@@ -190,6 +190,43 @@ async function saveCookies(jar) {
   await sendTelegram(`📦 Cookie regenerat după 2FA. A fost sincronizat automat în Gist.`);
 }
 
+async function saveNotesToGist(notes) {
+  if (!GIST_ID_NOTES || !GITHUB_TOKEN) return;
+  try {
+    await axios.patch(
+      `https://api.github.com/gists/${GIST_ID_NOTES}`,
+      {
+        files: {
+          "notes.json": { content: JSON.stringify(notes, null, 2) },
+        },
+      },
+      {
+        headers: {
+          Authorization: `token ${GITHUB_TOKEN}`,
+        },
+      }
+    );
+    console.log("💾 Fișierele analizate au fost salvate în notes.json din Gist.");
+  } catch (err) {
+    console.error("❌ Eroare la salvarea notes.json în Gist:", err.message);
+  }
+}
+
+async function loadNotesFromGist() {
+  if (!GIST_ID_NOTES || !GITHUB_TOKEN) return [];
+  try {
+    const res = await axios.get(`https://api.github.com/gists/${GIST_ID_NOTES}`, {
+      headers: { Authorization: `token ${GITHUB_TOKEN}` },
+    });
+    const content = res.data.files["notes.json"].content;
+    return JSON.parse(content);
+  } catch (err) {
+    console.error("❌ Eroare la încărcarea notes.json din Gist:", err.message);
+    return [];
+  }
+}
+
+
 // LOGIN + FETCH + CHECK FUNCTIONS
 
 async function login(force = false) {
@@ -381,18 +418,16 @@ async function checkNotes() {
 
   previousNoteCount = currentNoteCount;
   previousNotes = notes;
+  await saveNotesToGist(previousNotes);
 }
 
 // START MONITORING
 (async () => {
-  try {
-    console.log("🔁 Monitor activ.");
+  previousNotes = await loadNotesFromGist();
+  await sendTelegram(`🔄 Bot repornit. Fișiere restaurate din Gist: ${previousNotes.length}`);
+  await checkNotes();
+  setInterval(async () => {
+    console.log("⏰ Verificare periodică...");
     await checkNotes();
-    setInterval(async () => {
-      console.log("⏰ Verificare periodică...");
-      await checkNotes();
-    }, 60_000);
-  } catch (err) {
-    console.error("💥 Eroare la monitorizare:", err.message);
-  }
+  }, 60_000);
 })();
