@@ -417,9 +417,28 @@ async function checkNotes() {
     await sendTelegram(msg);
   }
 
-  previousNoteCount = currentNoteCount;
-  previousNotes = notes;
-  await saveNotesToGist(previousNotes);
+const prevMap = new Map(previousNotes.map(n => [n.id, n]));
+const currMap = new Map(notes.map(n => [n.id, n]));
+
+const notesChanged =
+  notes.length !== previousNotes.length || // file count change
+  [...currMap.keys()].some(id => !prevMap.has(id)) || // new file
+  [...prevMap.keys()].some(id => !currMap.has(id)) || // removed file
+  [...currMap.keys()].some(id => {
+    const prev = prevMap.get(id);
+    const curr = currMap.get(id);
+    return prev && curr && prev.isYellow !== curr.isYellow; // color changed
+  });
+
+if (notesChanged) {
+  await saveNotesToGist(notes);
+  console.log("📝 notes.json actualizat în Gist.");
+} else {
+  console.log("📭 Nicio modificare în lista de fișiere sau culori. Gist nu a fost actualizat.");
+}
+
+previousNoteCount = currentNoteCount;
+previousNotes = notes;
 }
 
 // START MONITORING
