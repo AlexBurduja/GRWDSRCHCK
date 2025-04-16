@@ -85,7 +85,7 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
         const diffMs = expiryDate - now;
         const daysLeft = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
-        await sendTelegram(`🔐 2FA expiră în ${daysLeft} zile.`, chatId);
+        await sendTelegram(`🔐 2FA a fost creat pe ${cookie2FA.creation} si expiră în ${daysLeft} zile.`, chatId);
       } else {
         await sendTelegram("⚠️ Cookie-ul 2FA nu a fost găsit. Probabil nu ai trecut încă prin 2FA.", chatId);
       }
