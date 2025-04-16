@@ -78,7 +78,7 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
       const cookieFile = JSON.stringify(JSON.parse(fs.readFileSync(COOKIE_FILE, "utf8")), null, 2)
       // const expiryDate = cookieFile.cookies[1].expires 
 
-      const expiryDate = new Date(cookieFile.cookies[1].expires);
+      const expiryDate = new Date(cookieFile.cookies[1]);
       const now = new Date();
 
       const diffMs = expiryDate - now; // difference in milliseconds
