@@ -84,7 +84,7 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
       // const daysPassed = Math.floor(diffMs / (1000 * 60 * 60 * 24));
       // const daysLeft = Math.max(0, 30 - daysPassed);
 
-      await sendTelegram(`${cookieFile}`, chatId)
+      await sendTelegram(JSON.stringify(cookieFile, null, 2), chatId)
       // await sendTelegram(`📅 Cod 2FA folosit acum ${daysPassed} zile.\n⏳ Mai sunt ${daysLeft} zile până expiră.`, chatId);
     } else {
       await sendTelegram("⚠️ Nu există informații despre 2FA. Probabil urmează autentificarea.", chatId);
