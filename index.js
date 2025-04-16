@@ -75,8 +75,14 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
 
   if (text === "/check") {
     if (fs.existsSync(COOKIE_FILE)) {
-      const cookieFile = JSON.parse(fs.readFileSync(COOKIE_FILE, "utf8"))
+      const cookieFile = JSON.stringify(JSON.parse(fs.readFileSync(COOKIE_FILE, "utf8")), null, 2)
+      // const expiryDate = cookieFile.cookies[1].expires 
 
+      const expiryDate = new Date(cookieFile.cookies[1].expires);
+      const now = new Date();
+
+      const diffMs = expiryDate - now; // difference in milliseconds
+      const daysLeft = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
       // const meta = JSON.parse(fs.readFileSync(META_FILE, "utf8"));
       // const loginDate = new Date(meta.loginDate);
       // const now = new Date();
@@ -84,7 +90,7 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
       // const daysPassed = Math.floor(diffMs / (1000 * 60 * 60 * 24));
       // const daysLeft = Math.max(0, 30 - daysPassed);
 
-      await sendTelegram(JSON.stringify(cookieFile, null, 2), chatId)
+      await sendTelegram(daysLeft, chatId)
       // await sendTelegram(`📅 Cod 2FA folosit acum ${daysPassed} zile.\n⏳ Mai sunt ${daysLeft} zile până expiră.`, chatId);
     } else {
       await sendTelegram("⚠️ Nu există informații despre 2FA. Probabil urmează autentificarea.", chatId);
