@@ -53,25 +53,20 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
     await sendTelegram("✅ Botul funcționează corect!", chatId);
   }
 
-  if (text === "/status") {
-  const total = previousNotes.length;
-
-  const galbene = previousNotes.filter(n => n.isYellow);
-  const verzi = previousNotes.filter(n => !n.isYellow);
-
-  let message = `📊 Fișiere detectate:\n\n`;
-
-  if (verzi.length > 0) {
-    message += `✅ Verzi (${verzi.length}):\n${verzi.map(n => n.id).join("\n")}\n\n`;
+  if (text.startsWith("/status ")) {
+    const name = text.substring(8).trim();
+    try {
+      const notes = await fetchTableDataFor(name, globalClient);
+      const total = notes.length;
+      const yellow = notes.filter(n => n.isYellow).length;
+      const white = total - yellow;
+  
+      await sendTelegram(`📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
+    } catch (error) {
+      await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
+    }
   }
-
-  if (galbene.length > 0) {
-    message += `🟡 Galbene (${galbene.length}):\n${galbene.map(n => n.id).join("\n")}\n\n`;
-  }
-
-  message += `📦 Total: ${total}`;
-  await sendTelegram(message, chatId);
-  }
+  
 
   if (text === "/check") {
     if (fs.existsSync(COOKIE_FILE)) {
@@ -108,12 +103,14 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
   if (text.startsWith("/status ")) {
   const name = text.substring(8).trim();
   try {
-    const notes = await fetchTableDataFor(name, globalClient);
+    const { notes, messageId } = await fetchTableDataFor(name, globalClient, chatId);
+
     const total = notes.length;
     const yellow = notes.filter(n => n.isYellow).length;
     const white = total - yellow;
 
-    await sendTelegram(`📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
+    await editTelegram(messageId, `📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
+
   } catch (error) {
     await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
   }
@@ -136,6 +133,19 @@ async function sendTelegram(msg, chatId = TELEGRAM_CHAT_ID) {
     console.log("Error sending Telegram message:", error.message);
   }
 }
+
+async function editTelegram(msgId, newText, chatId = TELEGRAM_CHAT_ID) {
+  try {
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/editMessageText`, {
+      chat_id: chatId,
+      message_id: msgId,
+      text: newText,
+    });
+  } catch (error) {
+    console.log("Error editing Telegram message:", error.message);
+  }
+}
+
 
 async function uploadToGist(content) {
   if (!GIST_ID || !GITHUB_TOKEN) return;
@@ -374,14 +384,21 @@ async function fetchTableData(client, retry = true) {
   return notes;
 };
 
-async function fetchTableDataFor(name, client) {
+async function fetchTableDataFor(name, client, chatId) {
+  const sent = await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    chat_id: chatId,
+    text: `⏳ Începem analiza pentru ${name}... 0%`,
+  });
+
+  const messageId = sent.data.result.message_id;
+
   const response = await client.get(TARGET_URL);
   const $ = cheerio.load(response.data);
 
   const viewstate = $("#__VIEWSTATE").val();
   const eventvalidation = $("#__EVENTVALIDATION").val();
   const viewstategenerator = $("#__VIEWSTATEGENERATOR").val();
-  const dropdownName = "ctl00$ContentPlaceHolderMain$DropDownListFilterLiquidator"; // exact name you gave me
+  const dropdownName = "ctl00$ContentPlaceHolderMain$DropDownListFilterLiquidator";
   const buttonName = "ctl00$ContentPlaceHolderMain$ButtonFilter";
 
   const dropdownOption = $(`select[name="${dropdownName}"] option`).filter(function () {
@@ -389,6 +406,7 @@ async function fetchTableDataFor(name, client) {
   }).attr("value");
 
   if (!dropdownOption) {
+    await editTelegram(messageId, `❌ Nu am găsit lichidatorul ${name}.`, chatId);
     throw new Error(`❌ Nu am găsit lichidatorul ${name}.`);
   }
 
@@ -414,13 +432,17 @@ async function fetchTableDataFor(name, client) {
 
   const table = $$("table#ctl00_ContentPlaceHolderMain_TabContainer_MAIN_TabPanel_APPROVAL_LIST_GridViewApprovalList");
   if (!table.length) {
-    throw new Error(`❌ Nu am găsit tabelul de dosare după filtrare.`);
+    await editTelegram(messageId, `❌ Nu am găsit tabelul după filtrare.`, chatId);
+    throw new Error(`❌ Nu am găsit tabelul după filtrare.`);
   }
 
   const rows = table.find("tr").slice(1);
+  const totalRows = rows.length;
+  let current = 0;
+
   const notes = [];
 
-  rows.each((_, row) => {
+  for (const row of rows) {
     const $row = $$(row);
     const tds = $row.find("td");
     const noteId = tds.eq(1).text().trim();
@@ -428,9 +450,15 @@ async function fetchTableDataFor(name, client) {
     const isYellow = bgcolorAttr === "#fff3cd";
 
     notes.push({ id: noteId, isYellow });
-  });
 
-  return notes;
+    current++;
+    if (current % Math.ceil(totalRows / 10) === 0 || current === totalRows) {
+      const percent = Math.floor((current / totalRows) * 100);
+      await editTelegram(messageId, `⏳ Analiză pentru ${name}: ${percent}%`, chatId);
+    }
+  }
+
+  return { notes, messageId };
 };
 
 
