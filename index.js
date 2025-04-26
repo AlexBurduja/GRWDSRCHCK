@@ -53,11 +53,7 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
     if (data.startsWith("status:")) {
       const name = data.substring(7);
 
-      await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/editMessageText`, {
-        chat_id: chatId,
-        message_id: callback.message.message_id,
-        text: `🔍 Am selectat: ${name}\nSe încarcă statusul...`
-      });
+      await sendTelegram(`🔍 Am selectat: ${name}\nSe încarcă statusul...`, chatId);
 
       try {
         if (!globalClient) {
