@@ -53,21 +53,6 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
     await sendTelegram("✅ Botul funcționează corect!", chatId);
   }
 
-  if (text.startsWith("/status ")) {
-    const name = text.substring(8).trim();
-    try {
-      const notes = await fetchTableDataFor(name, globalClient);
-      const total = notes.length;
-      const yellow = notes.filter(n => n.isYellow).length;
-      const white = total - yellow;
-  
-      await sendTelegram(`📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
-    } catch (error) {
-      await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
-    }
-  }
-  
-
   if (text === "/check") {
     if (fs.existsSync(COOKIE_FILE)) {
       const cookieFile = JSON.parse(fs.readFileSync(COOKIE_FILE, "utf8"));
