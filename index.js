@@ -1,4 +1,3 @@
-// index.js — COMPLET cu integrare Gist și funcționalitățile originale
 require("dotenv").config();
 
 const axios = require("axios");
@@ -43,124 +42,130 @@ app.get("/", (req, res) => {
 });
 
 app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
-  const body = req.body;
+  const message = req.body.message;
+  if (!message || !message.text) return res.sendStatus(200);
 
-  if (body.message) {
-    const message = body.message;
-    const chatId = message.chat.id;
-    const text = message.text.trim();
+  const chatId = message.chat.id;
+  const text = message.text.trim();
 
-    if (text === "/test") {
-      await sendTelegram("✅ Botul funcționează corect!", chatId);
-    } 
-    else if (text === "/check") {
-      if (fs.existsSync(COOKIE_FILE)) {
-        const cookieFile = JSON.parse(fs.readFileSync(COOKIE_FILE, "utf8"));
-        const cookies = cookieFile.cookies || [];
-        const cookie2FA = cookies.find(c => c.key === "2faKey");
+  if (text === "/test") {
+    await sendTelegram("✅ Botul funcționează corect!", chatId);
+  }
 
-        if (cookie2FA && cookie2FA.expires) {
-          const expiryDate = new Date(cookie2FA.expires);
-          const now = new Date();
-          const diffMs = expiryDate - now;
-          const daysLeft = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  if (text === "/check") {
+    if (fs.existsSync(COOKIE_FILE)) {
+      const cookieFile = JSON.parse(fs.readFileSync(COOKIE_FILE, "utf8"));
+      const cookies = cookieFile.cookies || [];
+      const cookie2FA = cookies.find(c => c.key === "2faKey");
 
-          await sendTelegram(`🔐 2FA a fost creat pe ${cookie2FA.creation} și expiră în ${daysLeft} zile.`, chatId);
-        } else {
-          await sendTelegram("⚠️ Cookie-ul 2FA nu a fost găsit. Probabil nu ai trecut încă prin 2FA.", chatId);
-        }
-      }
-    } 
-    else if (text.startsWith("/2fa ")) {
-      const code = text.split(" ")[1];
-      if (code && resumeLoginAfter2FA) {
-        clearTimeout(timeoutHandle);
-        saved2FACode = code;
-        pending2FA = false;
-        await sendTelegram("🔐 Cod 2FA primit. Continuăm autentificarea...", chatId);
-        resumeLoginAfter2FA(code);
+      if (cookie2FA && cookie2FA.expires) {
+        const expiryDate = new Date(cookie2FA.expires);
+        const now = new Date();
+        const diffMs = expiryDate - now;
+        const daysLeft = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+
+        await sendTelegram(`🔐 2FA a fost creat pe ${cookie2FA.creation} si expiră în ${daysLeft} zile.`, chatId);
       } else {
-        await sendTelegram("⚠️ Nu a fost solicitat un cod 2FA sau codul este invalid.", chatId);
-      }
-    } 
-    else if (text.startsWith("/status ")) {
-      const name = text.substring(8).trim();
-      try {
-        const { notes, messageId } = await fetchTableDataFor(name, globalClient, chatId);
-
-        const total = notes.length;
-        const yellow = notes.filter(n => n.isYellow).length;
-        const white = total - yellow;
-
-        await editTelegram(messageId, `📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
-      } catch (error) {
-        await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
-      }
-    }
-    else if (text === "/status") {
-      try {
-        if (!globalClient) {
-          const result = await login();
-          globalClient = result.client;
-        }
-
-        const colegi = await fetchColegi(globalClient);
-        const inlineKeyboard = colegi.map(nume => {
-          return [{ text: nume, callback_data: `status:${nume}` }];
-        });
-
-        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-          chat_id: chatId,
-          text: "👥 Alege colegul pentru care vrei status:",
-          reply_markup: { inline_keyboard: inlineKeyboard }
-        });
-
-      } catch (error) {
-        console.error("❌ Eroare la încărcare colegi:", error.message);
-        await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
+        await sendTelegram("⚠️ Cookie-ul 2FA nu a fost găsit. Probabil nu ai trecut încă prin 2FA.", chatId);
       }
     }
   }
-  else if (body.callback_query) {
-    const callback = body.callback_query;
-    const chatId = callback.message.chat.id;
-    const data = callback.data;
 
-    if (data.startsWith("status:")) {
-      const name = data.substring(7);
-
-      await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/editMessageText`, {
-        chat_id: chatId,
-        message_id: callback.message.message_id,
-        text: `🔍 Am selectat: ${name}\nSe încarcă statusul...`
-      });
-
-      try {
-        if (!globalClient) {
-          const result = await login();
-          globalClient = result.client;
-        }
-
-        const { notes, messageId } = await fetchTableDataFor(name, globalClient, chatId);
-
-        const total = notes.length;
-        const yellow = notes.filter(n => n.isYellow).length;
-        const white = total - yellow;
-
-        await editTelegram(messageId, `📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
-      } catch (error) {
-        await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
-      }
+  if (text.startsWith("/2fa ")) {
+    const code = text.split(" ")[1];
+    if (code && resumeLoginAfter2FA) {
+      clearTimeout(timeoutHandle);
+      saved2FACode = code;
+      pending2FA = false;
+      await sendTelegram("🔐 Cod 2FA primit. Continuăm autentificarea...", chatId);
+      resumeLoginAfter2FA(code);
+    } else {
+      await sendTelegram("⚠️ Nu a fost solicitat un cod 2FA sau codul este invalid.", chatId);
     }
+  }
 
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/answerCallbackQuery`, {
-      callback_query_id: callback.id
+  if (text.startsWith("/status ")) {
+  const name = text.substring(8).trim();
+  try {
+    const { notes, messageId } = await fetchTableDataFor(name, globalClient, chatId);
+
+    const total = notes.length;
+    const yellow = notes.filter(n => n.isYellow).length;
+    const white = total - yellow;
+
+    await editTelegram(messageId, `📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
+
+  } catch (error) {
+    await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
+  }
+}
+
+// 🔥 Adăugăm NOU:
+if (text === "/status") {
+  if (!globalClient) {
+    const result = await login();
+    globalClient = result.client;
+  }
+
+  const colegi = await fetchColegi(globalClient);
+
+  const inlineKeyboard = colegi.map(nume => {
+    return [{ text: nume, callback_data: `status:${nume}` }];
+  });
+
+  await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    chat_id: chatId,
+    text: "👥 Alege colegul pentru care vrei status:",
+    reply_markup: { inline_keyboard: inlineKeyboard }
+  });
+}
+
+const callback = req.body.callback_query;
+if (callback) {
+  const data = callback.data;
+  const chatId = callback.message.chat.id;
+
+  if (data.startsWith("status:")) {
+    const name = data.substring(7);
+
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/editMessageText`, {
+      chat_id: chatId,
+      message_id: callback.message.message_id,
+      text: `🔍 Am selectat: ${name}\nSe încarcă statusul...`
     });
+
+    try {
+      if (!globalClient) {
+        const result = await login();
+        globalClient = result.client;
+      }
+
+      const { notes, messageId } = await fetchTableDataFor(name, globalClient, chatId);
+
+      const total = notes.length;
+      const yellow = notes.filter(n => n.isYellow).length;
+      const white = total - yellow;
+
+      await editTelegram(messageId, `📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
+    } catch (error) {
+      await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
+    }
   }
+
+  await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/answerCallbackQuery`, {
+    callback_query_id: callback.id
+  });
+
+  return res.sendStatus(200);
+}
+
 
   res.sendStatus(200);
 });
 
+app.listen(PORT, () => {
+  console.log(`Express server is running on port ${PORT}`);
+});
 
 async function sendTelegram(msg, chatId = TELEGRAM_CHAT_ID) {
   try {
@@ -499,23 +504,6 @@ async function fetchTableDataFor(name, client, chatId) {
 
   return { notes, messageId };
 };
-
-async function fetchColegi(client) {
-  const response = await client.get(TARGET_URL);
-  const $ = cheerio.load(response.data);
-
-  const colegi = [];
-  const dropdownName = "ctl00$ContentPlaceHolderMain$DropDownListFilterLiquidator";
-
-  $(`select[name="${dropdownName}"] option`).each((_, option) => {
-    const name = $(option).text().trim();
-    if (name && name.length > 0 && name !== "- Toate -") {
-      colegi.push(name);
-    }
-  });
-
-  return colegi;
-}
 
 
 async function checkNotes() {
