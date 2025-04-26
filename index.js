@@ -505,6 +505,24 @@ async function fetchTableDataFor(name, client, chatId) {
   return { notes, messageId };
 };
 
+async function fetchColegi(client) {
+  const response = await client.get(TARGET_URL);
+  const $ = cheerio.load(response.data);
+
+  const colegi = [];
+  const dropdownName = "ctl00$ContentPlaceHolderMain$DropDownListFilterLiquidator";
+
+  $(`select[name="${dropdownName}"] option`).each((_, option) => {
+    const name = $(option).text().trim();
+    if (name && name.length > 0 && name !== "- Toate -") {
+      colegi.push(name);
+    }
+  });
+
+  return colegi;
+}
+
+
 
 async function checkNotes() {
   console.log("🧠 Pornire checkNotes()...");
