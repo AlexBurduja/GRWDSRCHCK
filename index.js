@@ -105,6 +105,20 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
     }
   }
 
+  if (text.startsWith("/status ")) {
+  const name = text.substring(8).trim();
+  try {
+    const notes = await fetchTableDataFor(name, globalClient);
+    const total = notes.length;
+    const yellow = notes.filter(n => n.isYellow).length;
+    const white = total - yellow;
+
+    await sendTelegram(`📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
+  } catch (error) {
+    await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
+  }
+}
+
   res.sendStatus(200);
 });
 
@@ -360,6 +374,64 @@ async function fetchTableData(client, retry = true) {
   return notes;
 };
 
+async function fetchTableDataFor(name, client) {
+  const response = await client.get(TARGET_URL);
+  const $ = cheerio.load(response.data);
+
+  const viewstate = $("#__VIEWSTATE").val();
+  const eventvalidation = $("#__EVENTVALIDATION").val();
+  const viewstategenerator = $("#__VIEWSTATEGENERATOR").val();
+  const dropdownName = "ctl00$ContentPlaceHolderMain$DropDownListFilterLiquidator"; // exact name you gave me
+  const buttonName = "ctl00$ContentPlaceHolderMain$ButtonFilter";
+
+  const dropdownOption = $(`select[name="${dropdownName}"] option`).filter(function () {
+    return $(this).text().trim().toLowerCase() === name.trim().toLowerCase();
+  }).attr("value");
+
+  if (!dropdownOption) {
+    throw new Error(`❌ Nu am găsit lichidatorul ${name}.`);
+  }
+
+  const payload = {
+    __VIEWSTATE: viewstate,
+    __VIEWSTATEGENERATOR: viewstategenerator,
+    __EVENTVALIDATION: eventvalidation,
+    Hidden_ClientJS: $("#Hidden_ClientJS").val() || "",
+    __EVENTTARGET: buttonName,
+    __EVENTARGUMENT: "",
+  };
+  payload[dropdownName] = dropdownOption;
+
+  const postResponse = await client.post(TARGET_URL, qs.stringify(payload), {
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Referer: TARGET_URL,
+      Origin: BASE_URL,
+    },
+  });
+
+  const $$ = cheerio.load(postResponse.data);
+
+  const table = $$("table#ctl00_ContentPlaceHolderMain_TabContainer_MAIN_TabPanel_APPROVAL_LIST_GridViewApprovalList");
+  if (!table.length) {
+    throw new Error(`❌ Nu am găsit tabelul de dosare după filtrare.`);
+  }
+
+  const rows = table.find("tr").slice(1);
+  const notes = [];
+
+  rows.each((_, row) => {
+    const $row = $$(row);
+    const tds = $row.find("td");
+    const noteId = tds.eq(1).text().trim();
+    const bgcolorAttr = $row.attr("bgcolor")?.toLowerCase() || "";
+    const isYellow = bgcolorAttr === "#fff3cd";
+
+    notes.push({ id: noteId, isYellow });
+  });
+
+  return notes;
+};
 
 
 async function checkNotes() {
