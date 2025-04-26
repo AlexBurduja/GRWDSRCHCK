@@ -110,8 +110,8 @@ if (text === "/status") {
   const colegi = await fetchColegi(globalClient);
 
   const inlineKeyboard = colegi.map(nume => {
-    return [{ text: nume, callback_data: `status:${nume}` }];
-  });
+  return [{ text: nume, switch_inline_query_current_chat: `/status ${nume}` }];
+});
 
   await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
     chat_id: chatId,
@@ -119,46 +119,6 @@ if (text === "/status") {
     reply_markup: { inline_keyboard: inlineKeyboard }
   });
 }
-
-const callback = req.body.callback_query;
-if (callback) {
-  const data = callback.data;
-  const chatId = callback.message.chat.id;
-
-  if (data.startsWith("status:")) {
-    const name = data.substring(7);
-
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/editMessageText`, {
-      chat_id: chatId,
-      message_id: callback.message.message_id,
-      text: `🔍 Am selectat: ${name}\nSe încarcă statusul...`
-    });
-
-    try {
-      if (!globalClient) {
-        const result = await login();
-        globalClient = result.client;
-      }
-
-      const { notes, messageId } = await fetchTableDataFor(name, globalClient, chatId);
-
-      const total = notes.length;
-      const yellow = notes.filter(n => n.isYellow).length;
-      const white = total - yellow;
-
-      await editTelegram(messageId, `📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
-    } catch (error) {
-      await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
-    }
-  }
-
-  await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/answerCallbackQuery`, {
-    callback_query_id: callback.id
-  });
-
-  return res.sendStatus(200);
-}
-
 
   res.sendStatus(200);
 });
