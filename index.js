@@ -42,7 +42,50 @@ app.get("/", (req, res) => {
 });
 
 app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
-  const message = req.body.message;
+  const body = req.body;
+
+  // ✨ 1. Dacă vine un callback (apasă pe buton)
+  if (body.callback_query) {
+    const callback = body.callback_query;
+    const chatId = callback.message.chat.id;
+    const data = callback.data;
+
+    if (data.startsWith("status:")) {
+      const name = data.substring(7);
+
+      await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/editMessageText`, {
+        chat_id: chatId,
+        message_id: callback.message.message_id,
+        text: `🔍 Am selectat: ${name}\nSe încarcă statusul...`
+      });
+
+      try {
+        if (!globalClient) {
+          const result = await login();
+          globalClient = result.client;
+        }
+
+        const { notes, messageId } = await fetchTableDataFor(name, globalClient, chatId);
+
+        const total = notes.length;
+        const yellow = notes.filter(n => n.isYellow).length;
+        const white = total - yellow;
+
+        await editTelegram(messageId, `📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
+      } catch (error) {
+        await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
+      }
+    }
+
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/answerCallbackQuery`, {
+      callback_query_id: callback.id
+    });
+
+    return res.sendStatus(200);
+  }
+
+  // ✨ 2. Dacă vine un mesaj normal (comenzi text)
+  const message = body.message;
   if (!message || !message.text) return res.sendStatus(200);
 
   const chatId = message.chat.id;
@@ -64,7 +107,7 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
         const diffMs = expiryDate - now;
         const daysLeft = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
-        await sendTelegram(`🔐 2FA a fost creat pe ${cookie2FA.creation} si expiră în ${daysLeft} zile.`, chatId);
+        await sendTelegram(`🔐 2FA a fost creat pe ${cookie2FA.creation} și expiră în ${daysLeft} zile.`, chatId);
       } else {
         await sendTelegram("⚠️ Cookie-ul 2FA nu a fost găsit. Probabil nu ai trecut încă prin 2FA.", chatId);
       }
@@ -85,40 +128,38 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
   }
 
   if (text.startsWith("/status ")) {
-  const name = text.substring(8).trim();
-  try {
-    const { notes, messageId } = await fetchTableDataFor(name, globalClient, chatId);
+    const name = text.substring(8).trim();
+    try {
+      const { notes, messageId } = await fetchTableDataFor(name, globalClient, chatId);
 
-    const total = notes.length;
-    const yellow = notes.filter(n => n.isYellow).length;
-    const white = total - yellow;
+      const total = notes.length;
+      const yellow = notes.filter(n => n.isYellow).length;
+      const white = total - yellow;
 
-    await editTelegram(messageId, `📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
-
-  } catch (error) {
-    await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
-  }
-}
-
-// 🔥 Adăugăm NOU:
-if (text === "/status") {
-  if (!globalClient) {
-    const result = await login();
-    globalClient = result.client;
+      await editTelegram(messageId, `📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
+    } catch (error) {
+      await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
+    }
   }
 
-  const colegi = await fetchColegi(globalClient);
+  if (text === "/status") {
+    if (!globalClient) {
+      const result = await login();
+      globalClient = result.client;
+    }
 
-  const inlineKeyboard = colegi.map(nume => {
-  return [{ text: nume, switch_inline_query_current_chat: `/status ${nume}` }];
-});
+    const colegi = await fetchColegi(globalClient);
 
-  await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-    chat_id: chatId,
-    text: "👥 Alege colegul pentru care vrei status:",
-    reply_markup: { inline_keyboard: inlineKeyboard }
-  });
-}
+    const inlineKeyboard = colegi.map(nume => {
+      return [{ text: nume, callback_data: `status:${nume}` }];
+    });
+
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+      chat_id: chatId,
+      text: "👥 Alege colegul pentru care vrei status:",
+      reply_markup: { inline_keyboard: inlineKeyboard }
+    });
+  }
 
   res.sendStatus(200);
 });
