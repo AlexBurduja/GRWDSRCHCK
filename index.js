@@ -114,7 +114,7 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
         const luna = (creationDate.getMonth() + 1).toString().padStart(2, '0');
         const anul = creationDate.getFullYear();
         const ora = creationDate.getHours().toString().padStart(2, '0');
-        const minutul = creatinoDate.getMinutes().toString().padStart(2, '0');
+        const minutul = creationDate.getMinutes().toString().padStart(2, '0');
         
         const formatFinal = `${ziua}.${luna}.${anul} ${ora}:${minutul}`;
 
