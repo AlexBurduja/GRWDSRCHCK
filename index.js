@@ -186,12 +186,15 @@ app.listen(PORT, () => {
 
 async function sendTelegram(msg, chatId = TELEGRAM_CHAT_ID) {
   try {
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-      chat_id: chatId,
-      text: msg,
-    });
-  } catch (error) {
-    console.log("Error sending Telegram message:", error.message);
+    return await axios.post(...);
+  } catch (e) {
+    if (e.response?.status === 429) {
+      const wait = (parseInt(e.response.headers['retry-after'], 10) || 1) * 1000;
+      console.warn(`❗ 429 received, retrying in ${wait}ms`);
+      await new Promise(r => setTimeout(r, wait));
+      return await axios.post(...); // retry once
+    }
+    throw e;
   }
 }
 
@@ -541,76 +544,26 @@ async function fetchColegi(client) {
 }
 
 async function checkNotes() {
-  console.log("🧠 Pornire checkNotes()...");
-
   if (!globalClient) globalClient = (await login()).client;
 
-  let finalMessage = `📋 Rezumat actualizare dosare:\n\n`;
-
+  const agregMessages = [];
   for (const { id, name } of MONITORED_LIQUIDATORS) {
-    console.log(`🔎 Verificare pentru ${name}...`);
-
-    const previousNotes = await loadNotesFromGist(id);
-
-    try {
-      const { notes } = await fetchTableDataFor(name, globalClient, TELEGRAM_CHAT_ID);
-
-      const currentIds = notes.map(n => n.id);
-      const previousIds = previousNotes.map(n => n.id);
-
-      const trulyNew = notes.filter(n => !previousIds.includes(n.id));
-      const disappeared = previousNotes.filter(n => !currentIds.includes(n.id));
-      const turnedYellow = notes.filter(n => {
-        const prev = previousNotes.find(p => p.id === n.id);
-        return prev && !prev.isYellow && n.isYellow;
-      });
-      const becameNormal = previousNotes.filter(p => {
-        const curr = notes.find(n => n.id === p.id);
-        return p.isYellow && curr && !curr.isYellow;
-      });
-
-      const prevMap = new Map(previousNotes.map(n => [n.id, n]));
-      const currMap = new Map(notes.map(n => [n.id, n]));
-
-      const notesChanged =
-        notes.length !== previousNotes.length ||
-        [...currMap.keys()].some(id => !prevMap.has(id)) ||
-        [...prevMap.keys()].some(id => !currMap.has(id)) ||
-        [...currMap.keys()].some(id => {
-          const prev = prevMap.get(id);
-          const curr = currMap.get(id);
-          return prev && curr && prev.isYellow !== curr.isYellow;
-        });
-
-      if (notesChanged) {
-        finalMessage += `📌 ${name}:\n`;
-
-        if (trulyNew.length > 0)
-          finalMessage += `📥 ${trulyNew.length} noi (${trulyNew.filter(n => n.isYellow).length} galbene)\n`;
-
-        if (disappeared.length > 0)
-          finalMessage += `🗑️ ${disappeared.length} eliminate\n`;
-
-        if (turnedYellow.length > 0)
-          finalMessage += `🟡 ${turnedYellow.length} au devenit galbene\n`;
-
-        if (becameNormal.length > 0)
-          finalMessage += `✅ ${becameNormal.length} au redevenit normale\n`;
-
-        finalMessage += "\n";
-
-        await saveNotesToGist(id, notes);
-        console.log(`📨 ${name}: schimbări detectate și salvate.`);
-      } else {
-        finalMessage += `📌 ${name}: fără modificări\n\n`;
-        console.log(`📭 ${name}: fără modificări.`);
-      }
-    } catch (err) {
-      finalMessage += `❌ ${name}: Eroare la verificare: ${err.message}\n\n`;
+    const prev = await loadNotesFromGist(id);
+    const { notes } = await fetchTableDataFor(name, globalClient, TELEGRAM_CHAT_ID);
+    // calculează trulyNew, disappeared, turnedYellow, becameNormal...
+    if (changed) {
+      agregMessages.push(`🔔 *${name}*:\n${details.join('\n')}`);
+      await saveNotesToGist(id, notes);
+    } else {
+      agregMessages.push(`✅ *${name}*: nimic nou`);
     }
   }
 
-  await sendTelegram(finalMessage.trim());
+  // trimite un singur mesaj dacă există ceva interesant (sau și dacă nu, la alegere)
+  const text = agregMessages.join('\n\n');
+  if (agregMessages.some(m => !m.includes('nimic nou'))) {
+    await sendTelegram(text);
+  }
 }
 
 (async () => {
