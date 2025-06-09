@@ -545,6 +545,8 @@ async function checkNotes() {
 
   if (!globalClient) globalClient = (await login()).client;
 
+  let finalMessage = `📋 Rezumat actualizare dosare:\n\n`;
+
   for (const { id, name } of MONITORED_LIQUIDATORS) {
     console.log(`🔎 Verificare pentru ${name}...`);
 
@@ -581,40 +583,35 @@ async function checkNotes() {
         });
 
       if (notesChanged) {
-        const messages = [];
+        finalMessage += `📌 ${name}:\n`;
 
-        if (trulyNew.length > 0) {
-          messages.push(`📥 (${name}) ${trulyNew.length} fișier(e) noi:\n${trulyNew.map(n => n.isYellow ? `🟡 ${n.id}` : n.id).join("\n")}`);
-        }
+        if (trulyNew.length > 0)
+          finalMessage += `📥 ${trulyNew.length} noi (${trulyNew.filter(n => n.isYellow).length} galbene)\n`;
 
-        if (disappeared.length > 0) {
-          messages.push(`🗑️ (${name}) ${disappeared.length} fișier(e) eliminate:\n${disappeared.map(n => n.isYellow ? `🟡 ${n.id}` : n.id).join("\n")}`);
-        }
+        if (disappeared.length > 0)
+          finalMessage += `🗑️ ${disappeared.length} eliminate\n`;
 
-        if (turnedYellow.length > 0) {
-          messages.push(`🟡 (${name}) ${turnedYellow.length} fișier(e) au devenit galbene:\n${turnedYellow.map(n => n.id).join("\n")}`);
-        }
+        if (turnedYellow.length > 0)
+          finalMessage += `🟡 ${turnedYellow.length} au devenit galbene\n`;
 
-        if (becameNormal.length > 0) {
-          messages.push(`✅ (${name}) ${becameNormal.length} fișier(e) nu mai sunt galbene:\n${becameNormal.map(n => n.id).join("\n")}`);
-        }
+        if (becameNormal.length > 0)
+          finalMessage += `✅ ${becameNormal.length} au redevenit normale\n`;
 
-        for (const msg of messages) {
-          await sendTelegram(msg);
-        }
+        finalMessage += "\n";
 
         await saveNotesToGist(id, notes);
-        console.log(`📨 ${name}: trimise notificări și actualizat Gist.`);
+        console.log(`📨 ${name}: schimbări detectate și salvate.`);
       } else {
-        console.log(`📭 ${name}: fără modificări. Nicio notificare trimisă.`);
+        finalMessage += `📌 ${name}: fără modificări\n\n`;
+        console.log(`📭 ${name}: fără modificări.`);
       }
-
     } catch (err) {
-      await sendTelegram(`❌ Eroare la verificare pentru ${name}: ${err.message}`);
+      finalMessage += `❌ ${name}: Eroare la verificare: ${err.message}\n\n`;
     }
   }
-}
 
+  await sendTelegram(finalMessage.trim());
+}
 
 (async () => {
   await sendTelegram(`🔄 Bot repornit. Se încarcă fișierele individuale...`);
