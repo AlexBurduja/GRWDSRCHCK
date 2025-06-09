@@ -41,7 +41,6 @@ const MONITORED_LIQUIDATORS = [
   { id: "88", name: "Donici Alexandru" },
 ];
 
-
 app.use(express.json());
 
 app.get("/", (req, res) => {
@@ -92,7 +91,6 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
     return res.sendStatus(200); // 🚀 închidem rapid request-ul ca să nu mai repornească serverul!
   }
 
-  // 🔥 Dacă vine un mesaj normal (comandă text)
   const message = body.message;
   if (!message || !message.text) return res.sendStatus(200);
 
@@ -182,7 +180,6 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
   res.sendStatus(200); // ⚡️ Închidem rapid și mesajele normale
 });
 
-
 app.listen(PORT, () => {
   console.log(`Express server is running on port ${PORT}`);
 });
@@ -209,7 +206,6 @@ async function editTelegram(msgId, newText, chatId = TELEGRAM_CHAT_ID) {
     console.log("Error editing Telegram message:", error.message);
   }
 }
-
 
 async function uploadToGist(content) {
   if (!GIST_ID || !GITHUB_TOKEN) return;
@@ -323,9 +319,6 @@ async function loadNotesFromGist(inspectorId) {
     return [];
   }
 }
-
-
-// LOGIN + FETCH + CHECK FUNCTIONS
 
 async function login(force = false) {
   const jar = await loadCookies();
@@ -631,4 +624,3 @@ async function checkNotes() {
     await checkNotes();
   }, 60_000);
 })();
-
