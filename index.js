@@ -547,7 +547,6 @@ async function fetchColegi(client) {
   return colegi;
 }
 
-
 async function checkNotes() {
   console.log("🧠 Pornire checkNotes()...");
 
@@ -561,7 +560,6 @@ async function checkNotes() {
     try {
       const { notes } = await fetchTableDataFor(name, globalClient, TELEGRAM_CHAT_ID);
 
-      const currentNoteCount = notes.length;
       const currentIds = notes.map(n => n.id);
       const previousIds = previousNotes.map(n => n.id);
 
@@ -575,22 +573,6 @@ async function checkNotes() {
         const curr = notes.find(n => n.id === p.id);
         return p.isYellow && curr && !curr.isYellow;
       });
-
-      if (trulyNew.length > 0) {
-        await sendTelegram(`📥 (${name}) Adăugate ${trulyNew.length} fișier(e):\n${trulyNew.map(n => n.isYellow ? `🟡 ${n.id}` : n.id).join("\n")}`);
-      }
-
-      if (disappeared.length > 0) {
-        await sendTelegram(`🗑️ (${name}) Dispărute ${disappeared.length} fișier(e):\n${disappeared.map(n => n.isYellow ? `🟡 ${n.id}` : n.id).join("\n")}`);
-      }
-
-      if (turnedYellow.length > 0) {
-        await sendTelegram(`🟡 (${name}) ${turnedYellow.length} fișier(e) au devenit galbene:\n${turnedYellow.map(n => n.id).join("\n")}`);
-      }
-
-      if (becameNormal.length > 0) {
-        await sendTelegram(`✅ (${name}) ${becameNormal.length} fișier(e) nu mai sunt galbene:\n${becameNormal.map(n => n.id).join("\n")}`);
-      }
 
       const prevMap = new Map(previousNotes.map(n => [n.id, n]));
       const currMap = new Map(notes.map(n => [n.id, n]));
@@ -606,9 +588,32 @@ async function checkNotes() {
         });
 
       if (notesChanged) {
+        const messages = [];
+
+        if (trulyNew.length > 0) {
+          messages.push(`📥 (${name}) ${trulyNew.length} fișier(e) noi:\n${trulyNew.map(n => n.isYellow ? `🟡 ${n.id}` : n.id).join("\n")}`);
+        }
+
+        if (disappeared.length > 0) {
+          messages.push(`🗑️ (${name}) ${disappeared.length} fișier(e) eliminate:\n${disappeared.map(n => n.isYellow ? `🟡 ${n.id}` : n.id).join("\n")}`);
+        }
+
+        if (turnedYellow.length > 0) {
+          messages.push(`🟡 (${name}) ${turnedYellow.length} fișier(e) au devenit galbene:\n${turnedYellow.map(n => n.id).join("\n")}`);
+        }
+
+        if (becameNormal.length > 0) {
+          messages.push(`✅ (${name}) ${becameNormal.length} fișier(e) nu mai sunt galbene:\n${becameNormal.map(n => n.id).join("\n")}`);
+        }
+
+        for (const msg of messages) {
+          await sendTelegram(msg);
+        }
+
         await saveNotesToGist(id, notes);
+        console.log(`📨 ${name}: trimise notificări și actualizat Gist.`);
       } else {
-        console.log(`📭 (${name}) fără modificări.`);
+        console.log(`📭 ${name}: fără modificări. Nicio notificare trimisă.`);
       }
 
     } catch (err) {
@@ -616,6 +621,7 @@ async function checkNotes() {
     }
   }
 }
+
 
 (async () => {
   await sendTelegram(`🔄 Bot repornit. Se încarcă fișierele individuale...`);
