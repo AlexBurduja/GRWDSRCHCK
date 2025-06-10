@@ -614,5 +614,5 @@ async function checkNotes() {
   setInterval(async () => {
     console.log("⏰ Verificare periodică...");
     await checkNotes();
-  }, 60_000);
+  }, 5*60_000);
 })();
