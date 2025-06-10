@@ -446,14 +446,7 @@ async function fetchTableData(client, retry = true) {
   return notes;
 };
 
-async function fetchTableDataFor(name, client, chatId) {
-  const sent = await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-    chat_id: chatId,
-    text: `⏳ Începem analiza pentru ${name}... 0%`,
-  });
-
-  const messageId = sent.data.result.message_id;
-
+async function fetchTableDataFor(name, client) {
   const response = await client.get(TARGET_URL);
   const $ = cheerio.load(response.data);
 
@@ -468,7 +461,6 @@ async function fetchTableDataFor(name, client, chatId) {
   }).attr("value");
 
   if (!dropdownOption) {
-    await editTelegram(messageId, `❌ Nu am găsit lichidatorul ${name}.`, chatId);
     throw new Error(`❌ Nu am găsit lichidatorul ${name}.`);
   }
 
@@ -491,17 +483,13 @@ async function fetchTableDataFor(name, client, chatId) {
   });
 
   const $$ = cheerio.load(postResponse.data);
-
   const table = $$("table#ctl00_ContentPlaceHolderMain_TabContainer_MAIN_TabPanel_APPROVAL_LIST_GridViewApprovalList");
+
   if (!table.length) {
-    await editTelegram(messageId, `❌ Nu am găsit tabelul după filtrare.`, chatId);
-    throw new Error(`❌ Nu am găsit tabelul după filtrare.`);
+    throw new Error(`❌ Nu am găsit tabelul după filtrare pentru ${name}.`);
   }
 
   const rows = table.find("tr").slice(1);
-  const totalRows = rows.length;
-  let current = 0;
-
   const notes = [];
 
   for (const row of rows) {
@@ -512,16 +500,10 @@ async function fetchTableDataFor(name, client, chatId) {
     const isYellow = bgcolorAttr === "#fff3cd";
 
     notes.push({ id: noteId, isYellow });
-
-    current++;
-    if (current % Math.ceil(totalRows / 10) === 0 || current === totalRows) {
-      const percent = Math.floor((current / totalRows) * 100);
-      await editTelegram(messageId, `⏳ Analiză pentru ${name}: ${percent}%`, chatId);
-    }
   }
 
-  return { notes, messageId };
-};
+  return { notes };
+}
 
 async function fetchColegi(client) {
   const response = await client.get(TARGET_URL);
@@ -554,7 +536,7 @@ async function checkNotes() {
     const previousNotes = await loadNotesFromGist(id);
 
     try {
-      const { notes } = await fetchTableDataFor(name, globalClient, TELEGRAM_CHAT_ID);
+      const { notes } = await fetchTableDataFor(name, globalClient);
 
       const currentIds = notes.map(n => n.id);
       const previousIds = previousNotes.map(n => n.id);
