@@ -583,34 +583,39 @@ async function checkNotes() {
           return prev && curr && prev.isYellow !== curr.isYellow;
         });
 
+      finalMessage += `📌 ${name}:\n`;
+
       if (notesChanged) {
         changesDetected = true;
-        finalMessage += `📌 ${name}:\n`;
 
-        if (trulyNew.length > 0)
-          finalMessage += `📥 ${trulyNew.length} noi (${trulyNew.filter(n => n.isYellow).length} galbene)\n`;
+        for (const d of disappeared) {
+          finalMessage += `🗑️ dosar eliminat – ${d.id}\n`;
+        }
 
-        if (disappeared.length > 0)
-          finalMessage += `🗑️ ${disappeared.length} eliminate\n`;
+        for (const n of trulyNew) {
+          finalMessage += `📥 dosar nou – ${n.id}${n.isYellow ? " (galben)" : ""}\n`;
+        }
 
-        if (turnedYellow.length > 0)
-          finalMessage += `🟡 ${turnedYellow.length} au devenit galbene\n`;
+        for (const y of turnedYellow) {
+          finalMessage += `🟡 a devenit galben – ${y.id}\n`;
+        }
 
-        if (becameNormal.length > 0)
-          finalMessage += `✅ ${becameNormal.length} au redevenit normale\n`;
-
-        finalMessage += "\n";
+        for (const n of becameNormal) {
+          finalMessage += `✅ a redevenit normal – ${n.id}\n`;
+        }
 
         await saveNotesToGist(id, notes);
         console.log(`📨 ${name}: schimbări detectate și salvate.`);
       } else {
-        finalMessage += `📌 ${name}: fără modificări\n\n`;
+        finalMessage += `nimic schimbat\n`;
         console.log(`📭 ${name}: fără modificări.`);
       }
 
+      finalMessage += "\n";
+
     } catch (err) {
       changesDetected = true;
-      finalMessage += `❌ ${name}: Eroare la verificare: ${err.message}\n\n`;
+      finalMessage += `❌ Eroare la verificare: ${err.message}\n\n`;
     }
   }
 
