@@ -35,6 +35,12 @@ let globalCookieJar = null;
 const app = express();
 const PORT = 3000;
 
+const MONITORED_LIQUIDATORS = [
+  { id: "507", name: "Burduja Alexandru" },
+  { id: "92", name: "Agiu Ionut" },
+  { id: "88", name: "Donici Alexandru" },
+];
+
 app.use(express.json());
 
 app.get("/", (req, res) => {
@@ -85,7 +91,6 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
     return res.sendStatus(200); // 🚀 închidem rapid request-ul ca să nu mai repornească serverul!
   }
 
-  // 🔥 Dacă vine un mesaj normal (comandă text)
   const message = body.message;
   if (!message || !message.text) return res.sendStatus(200);
 
@@ -175,7 +180,6 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
   res.sendStatus(200); // ⚡️ Închidem rapid și mesajele normale
 });
 
-
 app.listen(PORT, () => {
   console.log(`Express server is running on port ${PORT}`);
 });
@@ -202,7 +206,6 @@ async function editTelegram(msgId, newText, chatId = TELEGRAM_CHAT_ID) {
     console.log("Error editing Telegram message:", error.message);
   }
 }
-
 
 async function uploadToGist(content) {
   if (!GIST_ID || !GITHUB_TOKEN) return;
@@ -276,14 +279,16 @@ async function saveCookies(jar) {
   await sendTelegram(`📦 Cookie regenerat după 2FA. A fost sincronizat automat în Gist.`);
 }
 
-async function saveNotesToGist(notes) {
+async function saveNotesToGist(inspectorId, notes) {
   if (!GIST_ID_NOTES || !GITHUB_TOKEN) return;
   try {
     await axios.patch(
       `https://api.github.com/gists/${GIST_ID_NOTES}`,
       {
         files: {
-          "notes.json": { content: JSON.stringify(notes, null, 2) },
+          [`notes_${inspectorId}.json`]: {
+            content: JSON.stringify(notes, null, 2),
+          },
         },
       },
       {
@@ -292,28 +297,28 @@ async function saveNotesToGist(notes) {
         },
       }
     );
-    console.log("💾 Fișierele analizate au fost salvate în notes.json din Gist.");
+    console.log(`💾 notes_${inspectorId}.json salvat în Gist.`);
   } catch (err) {
-    console.error("❌ Eroare la salvarea notes.json în Gist:", err.message);
+    console.error("❌ Eroare la salvare notes în Gist:", err.message);
   }
 }
 
-async function loadNotesFromGist() {
+async function loadNotesFromGist(inspectorId) {
   if (!GIST_ID_NOTES || !GITHUB_TOKEN) return [];
   try {
     const res = await axios.get(`https://api.github.com/gists/${GIST_ID_NOTES}`, {
       headers: { Authorization: `token ${GITHUB_TOKEN}` },
     });
-    const content = res.data.files["notes.json"].content;
-    return JSON.parse(content);
+
+    const file = res.data.files[`notes_${inspectorId}.json`];
+    if (!file) return [];
+
+    return JSON.parse(file.content);
   } catch (err) {
-    console.error("❌ Eroare la încărcarea notes.json din Gist:", err.message);
+    console.error("❌ Eroare la încărcare notes:", err.message);
     return [];
   }
 }
-
-
-// LOGIN + FETCH + CHECK FUNCTIONS
 
 async function login(force = false) {
   const jar = await loadCookies();
@@ -535,95 +540,89 @@ async function fetchColegi(client) {
   return colegi;
 }
 
-
-
 async function checkNotes() {
   console.log("🧠 Pornire checkNotes()...");
+
   if (!globalClient) globalClient = (await login()).client;
 
-  const notes = await fetchTableData(globalClient);
-  const currentNoteCount = notes.length;
-  console.log(`🧾 Fișiere detectate: ${currentNoteCount}`);
+  let finalMessage = `📋 Rezumat actualizare dosare:\n\n`;
+  let changesDetected = false;
 
-  const currentIds = notes.map(n => n.id);
-  const previousIds = previousNotes.map(n => n.id);
+  for (const { id, name } of MONITORED_LIQUIDATORS) {
+    console.log(`🔎 Verificare pentru ${name}...`);
 
-  // Fișiere NOI (complet noi)
-  const trulyNew = notes.filter(n => !previousIds.includes(n.id));
+    const previousNotes = await loadNotesFromGist(id);
 
-  // Fișiere care AU DISPĂRUT
-  const disappeared = previousNotes.filter(n => !currentIds.includes(n.id));
+    try {
+      const { notes } = await fetchTableDataFor(name, globalClient, TELEGRAM_CHAT_ID);
 
-  // Fișiere care AU DEVENIT GALBENE (existau înainte, dar nu erau galbene)
-  const turnedYellow = notes.filter(n => {
-    const prev = previousNotes.find(p => p.id === n.id);
-    return prev && !prev.isYellow && n.isYellow;
-  });
+      const currentIds = notes.map(n => n.id);
+      const previousIds = previousNotes.map(n => n.id);
 
-  // Fișiere care NU MAI SUNT GALBENE (erau galbene înainte, acum nu mai sunt)
-  const becameNormal = previousNotes.filter(p => {
-    const curr = notes.find(n => n.id === p.id);
-    return p.isYellow && curr && !curr.isYellow;
-  });
+      const trulyNew = notes.filter(n => !previousIds.includes(n.id));
+      const disappeared = previousNotes.filter(n => !currentIds.includes(n.id));
+      const turnedYellow = notes.filter(n => {
+        const prev = previousNotes.find(p => p.id === n.id);
+        return prev && !prev.isYellow && n.isYellow;
+      });
+      const becameNormal = previousNotes.filter(p => {
+        const curr = notes.find(n => n.id === p.id);
+        return p.isYellow && curr && !curr.isYellow;
+      });
 
-  // 📨 Trimit mesaje
+      const prevMap = new Map(previousNotes.map(n => [n.id, n]));
+      const currMap = new Map(notes.map(n => [n.id, n]));
 
-  if (trulyNew.length > 0) {
-    const msg = `📥 S-au adăugat ${trulyNew.length} fișier(e):\n` +
-                trulyNew.map((n) => n.isYellow ? `🟡 ${n.id}` : n.id).join("\n") +
-                `\n\nTotal: ${currentNoteCount}`;
-    await sendTelegram(msg);
+      const notesChanged =
+        notes.length !== previousNotes.length ||
+        [...currMap.keys()].some(id => !prevMap.has(id)) ||
+        [...prevMap.keys()].some(id => !currMap.has(id)) ||
+        [...currMap.keys()].some(id => {
+          const prev = prevMap.get(id);
+          const curr = currMap.get(id);
+          return prev && curr && prev.isYellow !== curr.isYellow;
+        });
+
+      if (notesChanged) {
+        changesDetected = true;
+        finalMessage += `📌 ${name}:\n`;
+
+        if (trulyNew.length > 0)
+          finalMessage += `📥 ${trulyNew.length} noi (${trulyNew.filter(n => n.isYellow).length} galbene)\n`;
+
+        if (disappeared.length > 0)
+          finalMessage += `🗑️ ${disappeared.length} eliminate\n`;
+
+        if (turnedYellow.length > 0)
+          finalMessage += `🟡 ${turnedYellow.length} au devenit galbene\n`;
+
+        if (becameNormal.length > 0)
+          finalMessage += `✅ ${becameNormal.length} au redevenit normale\n`;
+
+        finalMessage += "\n";
+
+        await saveNotesToGist(id, notes);
+        console.log(`📨 ${name}: schimbări detectate și salvate.`);
+      } else {
+        finalMessage += `📌 ${name}: fără modificări\n\n`;
+        console.log(`📭 ${name}: fără modificări.`);
+      }
+
+    } catch (err) {
+      changesDetected = true;
+      finalMessage += `❌ ${name}: Eroare la verificare: ${err.message}\n\n`;
+    }
   }
 
-  if (disappeared.length > 0) {
-    const msg = `🗑️ Au dispărut ${disappeared.length} fișier(e):\n` +
-                disappeared.map((n) => n.isYellow ? `🟡 ${n.id}` : n.id).join("\n") +
-                `\n\nTotal: ${currentNoteCount}`;
-    await sendTelegram(msg);
+  if (changesDetected) {
+    await sendTelegram(finalMessage.trim());
+  } else {
+    console.log("📭 Nicio modificare detectată la niciun inspector. Nu trimitem mesaj.");
   }
-
-  if (turnedYellow.length > 0) {
-    const msg = `🟡 ${turnedYellow.length} fișier(e) au devenit cu fundal galben:\n` +
-                turnedYellow.map(n => n.id).join("\n") +
-                `\n\nTotal: ${currentNoteCount}`;
-    await sendTelegram(msg);
-  }
-
-  if (becameNormal.length > 0) {
-    const msg = `✅ ${becameNormal.length} fișier(e) nu mai sunt galbene:\n` +
-                becameNormal.map(n => n.id).join("\n") +
-                `\n\nTotal: ${currentNoteCount}`;
-    await sendTelegram(msg);
-  }
-
-const prevMap = new Map(previousNotes.map(n => [n.id, n]));
-const currMap = new Map(notes.map(n => [n.id, n]));
-
-const notesChanged =
-  notes.length !== previousNotes.length || // file count change
-  [...currMap.keys()].some(id => !prevMap.has(id)) || // new file
-  [...prevMap.keys()].some(id => !currMap.has(id)) || // removed file
-  [...currMap.keys()].some(id => {
-    const prev = prevMap.get(id);
-    const curr = currMap.get(id);
-    return prev && curr && prev.isYellow !== curr.isYellow; // color changed
-  });
-
-if (notesChanged) {
-  await saveNotesToGist(notes);
-  console.log("📝 notes.json actualizat în Gist.");
-} else {
-  console.log("📭 Nicio modificare în lista de fișiere sau culori. Gist nu a fost actualizat.");
 }
 
-previousNoteCount = currentNoteCount;
-previousNotes = notes;
-}
-
-// START MONITORING
 (async () => {
-  previousNotes = await loadNotesFromGist();
-  await sendTelegram(`🔄 Bot repornit. Fișiere restaurate din Gist: ${previousNotes.length}`);
+  await sendTelegram(`🔄 Bot repornit. Se încarcă fișierele individuale...`);
   await checkNotes();
   setInterval(async () => {
     console.log("⏰ Verificare periodică...");
