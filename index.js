@@ -525,7 +525,17 @@ async function fetchColegi(client) {
 async function checkNotes() {
   console.log("🧠 Pornire checkNotes()...");
 
-  if (!globalClient) globalClient = (await login()).client;
+  // Verificăm dacă globalClient e valid și poate accesa TARGET_URL
+  try {
+    if (!globalClient) {
+      globalClient = (await login()).client;
+    } else {
+      await globalClient.get(TARGET_URL); // test silențios
+    }
+  } catch (e) {
+    console.warn("⚠️ globalClient a devenit invalid. Refacem login forțat...");
+    globalClient = (await login(true)).client;
+  }
 
   let finalMessage = `📋 Rezumat actualizare dosare:\n\n`;
   let changesDetected = false;
