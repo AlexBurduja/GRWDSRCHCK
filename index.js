@@ -100,6 +100,7 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
   if (text === "/test") {
     await sendTelegram("✅ Botul funcționează corect!", chatId);
   }
+
   if (text === "/check") {
     if (fs.existsSync(COOKIE_FILE)) {
       const cookieFile = JSON.parse(fs.readFileSync(COOKIE_FILE, "utf8"));
@@ -524,17 +525,7 @@ async function fetchColegi(client) {
 async function checkNotes() {
   console.log("🧠 Pornire checkNotes()...");
 
-  // Verificăm dacă globalClient e valid și poate accesa TARGET_URL
-  try {
-    if (!globalClient) {
-      globalClient = (await login()).client;
-    } else {
-      await globalClient.get(TARGET_URL); // test silențios
-    }
-  } catch (e) {
-    console.warn("⚠️ globalClient a devenit invalid. Refacem login forțat...");
-    globalClient = (await login(true)).client;
-  }
+  if (!globalClient) globalClient = (await login()).client;
 
   let finalMessage = `📋 Rezumat actualizare dosare:\n\n`;
   let changesDetected = false;
