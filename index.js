@@ -36,9 +36,9 @@ const app = express();
 const PORT = 3000;
 
 const MONITORED_LIQUIDATORS = [
-  { id: "507", name: "Burduja Alexandru" },
-  { id: "92", name: "Agiu Ionut" },
-  { id: "88", name: "Donici Alexandru" },
+  { id: "507", name: "Burduja Alexandru", enabled: true },
+  { id: "92", name: "Agiu Ionut", enabled: false },
+  { id: "88", name: "Donici Alexandru", enabled: true },
 ];
 
 app.use(express.json());
@@ -564,7 +564,8 @@ async function checkNotes() {
   let finalMessage = `📋 Rezumat actualizare dosare:\n\n`;
   let changesDetected = false;
 
-  for (const { id, name } of MONITORED_LIQUIDATORS) {
+  // for (const { id, name } of MONITORED_LIQUIDATORS) {
+  for (const { id, name } of MONITORED_LIQUIDATORS.filter(l => l.enabled)) {
     console.log(`🔎 Verificare pentru ${name}...`);
 
     const previousNotes = await loadNotesFromGist(id);
