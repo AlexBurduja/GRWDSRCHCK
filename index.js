@@ -37,7 +37,7 @@ const PORT = 3000;
 
 const MONITORED_LIQUIDATORS = [
   { id: "507", name: "Burduja Alexandru", enabled: true },
-  { id: "92", name: "Agiu Ionut", enabled: false },
+  { id: "92", name: "Agiu Ionut", enabled: true },
   { id: "88", name: "Donici Alexandru", enabled: true },
 ];
 
