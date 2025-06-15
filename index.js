@@ -461,8 +461,42 @@ async function fetchTableDataFor(name, client) {
   }).attr("value");
 
   if (!dropdownOption) {
-    throw new Error(`❌ Nu am găsit lichidatorul ${name}.`);
-  }
+    console.warn(`⚠️ Lichidatorul ${name} nu a fost găsit. Retry simplu în 2s...`);
+    await new Promise(r => setTimeout(r, 2000));
+  
+    // Retry simplu
+    const retryRes = await client.get(TARGET_URL);
+    const $$retry = cheerio.load(retryRes.data);
+    const retryOption = $$retry(`select[name="${dropdownName}"] option`).filter(function () {
+      return $$(this).text().trim().toLowerCase() === name.trim().toLowerCase();
+    }).attr("value");
+  
+    if (retryOption) {
+      console.log(`✅ Retry reușit pentru ${name}`);
+      return await fetchTableDataFor(name, client);
+    }
+  
+    // Retry eșuat → încercăm relogin
+    console.log(`🔁 Retry eșuat. Încerc relogin pentru ${name}...`);
+    const { client: newClient } = await login(true);
+    const reloginRes = await newClient.get(TARGET_URL);
+    const $$$ = cheerio.load(reloginRes.data);
+    const reloginOption = $$$(`select[name="${dropdownName}"] option`).filter(function () {
+      return $$$(this).text().trim().toLowerCase() === name.trim().toLowerCase();
+    }).attr("value");
+  
+    if (reloginOption) {
+      console.log(`🔓 Relogin reușit pentru ${name}`);
+      return await fetchTableDataFor(name, newClient);
+    }
+  
+    // Dacă tot nu merge, salvăm pagina pentru debug
+    const filename = `debug_dropdown_${name.replace(/ /g, "_")}_${Date.now()}.html`;
+    fs.writeFileSync(filename, reloginRes.data);
+    console.warn(`❌ Lichidatorul ${name} nu a fost găsit nici după retry + relogin. HTML salvat: ${filename}`);
+  
+    throw new Error(`❌ Nu am găsit lichidatorul ${name} nici după retry și relogin.`);
+}
 
   const payload = {
     __VIEWSTATE: viewstate,
