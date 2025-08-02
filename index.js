@@ -82,7 +82,7 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
           const yellow = notes.filter(n => n.isYellow).length;
           const white = total - yellow;
 
-          await editTelegram(messageId, `📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
+          await sendTelegram(`📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
         } catch (error) {
           await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
         }
