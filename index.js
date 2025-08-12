@@ -41,6 +41,8 @@ const MONITORED_LIQUIDATORS = [
   { id: "92", name: "Agiu Ionut", enabled: true },
   { id: "88", name: "Donici Alexandru", enabled: true },
   { id: "51", name: "Bucur Mihai", enabled: true },
+  { id: "16", name: "Balta Dan", enabled: true },
+  { id: "89", name: "Maianu Marian", enabled: true },
 ];
 
 app.use(express.json());
