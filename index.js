@@ -145,12 +145,13 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
 
   await sendTelegram("🔄 Cookie șters. Forțăm 2FA...", chatId);
 
-  try {
-    const result = await login(true);
-    globalClient = result.client;
-  } catch (err) {
-    await sendTelegram(`❌ Eroare la force 2FA: ${err.message}`, chatId);
-  }
+  login(true)
+    .then(result => {
+      globalClient = result.client;
+    })
+    .catch(err => {
+      sendTelegram(`❌ Eroare la force 2FA: ${err.message}`, chatId);
+    });
 }
 
   if (text.startsWith("/2fa ")) {
