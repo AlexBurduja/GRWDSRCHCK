@@ -437,6 +437,7 @@ if (force) {
         clearTimeout(timeoutHandle);
         await sendTelegram("✅ Autentificare reușită după 2FA!");
         saveCookies(jar);
+        globalClient = client;
         resolve({ client });
       };
     });
