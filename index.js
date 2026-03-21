@@ -116,7 +116,12 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
         const expiryDate = new Date(cookie2FA.expires);
         const now = new Date();
         const diffMs = expiryDate - now;
-        const daysLeft = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+
+        const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+        const daysLeft = Math.max(0, days);
+        const hoursLeft = Math.max(0, hours);
 
         const creationDate = new Date(cookie2FA.creation);
 
@@ -128,7 +133,7 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
         
         const formatFinal = `${ziua}.${luna}.${anul} ${ora}:${minutul}`;
 
-        await sendTelegram(`🔐 2FA a fost creat pe ${formatFinal} și expiră în ${daysLeft} zile.`, chatId);
+        await sendTelegram(`🔐 2FA a fost creat pe ${formatFinal} și expiră în ${daysLeft} zile și ${hoursLeft} ore.`, chatId);
       } else {
         await sendTelegram("⚠️ Cookie-ul 2FA nu a fost găsit. Probabil nu ai trecut încă prin 2FA.", chatId);
       }
