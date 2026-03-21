@@ -141,7 +141,10 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
   }
 
   if (text === "/force2fa") {
-  await sendTelegram("🔄 Forțăm relogin și 2FA...", chatId);
+  if (fs.existsSync(COOKIE_FILE)) fs.unlinkSync(COOKIE_FILE);
+
+  await sendTelegram("🔄 Cookie șters. Forțăm 2FA...", chatId);
+
   try {
     const result = await login(true);
     globalClient = result.client;
