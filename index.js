@@ -344,7 +344,14 @@ async function loadNotesFromGist(inspectorId) {
 }
 
 async function login(force = false) {
-  const jar = await loadCookies();
+  let jar;
+
+if (force) {
+  console.log("🔄 Force login: ignorăm cookies existente");
+  jar = new tough.CookieJar();
+} else {
+  jar = await loadCookies();
+}
   globalCookieJar = jar;
   const client = wrapper(axios.create({
   jar,
