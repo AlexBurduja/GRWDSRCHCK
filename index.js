@@ -1,5 +1,5 @@
+// FULL FILE WITH COOKIE ENV SUPPORT (modified)
 require("dotenv").config();
-
 
 const axios = require("axios");
 const cheerio = require("cheerio");
@@ -16,196 +16,65 @@ const LOGIN_URL = `${BASE_URL}/login.aspx`;
 const TARGET_URL = `${BASE_URL}/content/files/check/file_list_check_client.aspx`;
 const USERNAME = process.env.LOGIN_USERNAME;
 const PASSWORD = process.env.LOGIN_PASSWORD;
-const GIST_ID = process.env.GIST_ID;
-const GIST_ID_NOTES = process.env.GIST_ID_NOTES
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 const COOKIE_FILE = "./cookies.json";
-const META_FILE = "./cookie_meta.json";
 
-let previousNotes = [];
-let previousNoteCount = 0;
-let pending2FA = false;
-let saved2FACode = null;
 let resumeLoginAfter2FA = null;
 let timeoutHandle = null;
 
 let globalClient = null;
-let globalCookieJar = null;
 
 const app = express();
 const PORT = 3000;
 
-const MONITORED_LIQUIDATORS = [
-  { id: "507", name: "Burduja Alexandru", enabled: true },
-  { id: "92", name: "Agiu Ionut", enabled: true },
-  { id: "88", name: "Donici Alexandru", enabled: true },
-  ///{ id: "51", name: "Bucur Mihai", enabled: true },
-  ///{ id: "16", name: "Balta Dan", enabled: true },
-  ///{ id: "89", name: "Maianu Marian", enabled: true },
-  ///{ id : "0", name: "--- Toti ---", enabled: true }, 
-];
-
 app.use(express.json());
 
-app.get("/", (req, res) => {
-  res.send("Botul este activ.");
-});
-
-app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
-  const body = req.body;
-
-  // 🔥 Dacă vine un callback_query (apasă pe buton)
-  if (body.callback_query) {
-    const callback = body.callback_query;
-    const chatId = callback.message.chat.id;
-    const data = callback.data;
-
-    if (data.startsWith("status:")) {
-      const name = data.substring(7);
-
-      // 📤 Răspundem imediat la callback_query ca să evităm blocaje
-      await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/answerCallbackQuery`, {
-        callback_query_id: callback.id
-      });
-
-      // 📬 Trimitem un mesaj de încărcare
-      await sendTelegram(`🔍 Am selectat: ${name}\n⏳ Se încarcă statusul...`, chatId);
-
-      // 🧠 AICI continuăm logica fără să mai blocăm request-ul
-      setTimeout(async () => {
-        try {
-          if (!globalClient) {
-            const result = await login();
-            globalClient = result.client;
-          }
-
-          const { notes, messageId } = await fetchTableDataFor(name, globalClient, chatId);
-
-          const total = notes.length;
-          const yellow = notes.filter(n => n.isYellow).length;
-          const white = total - yellow;
-
-          await sendTelegram(`📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
-        } catch (error) {
-          await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
-        }
-      }, 0);
-    }
-
-    return res.sendStatus(200); // 🚀 închidem rapid request-ul ca să nu mai repornească serverul!
+// ---------------- COOKIES ----------------
+function loadCookies() {
+  if (process.env.COOKIES_JSON) {
+    console.log("📦 Cookie încărcat din ENV");
+    return tough.CookieJar.deserializeSync(
+      JSON.parse(process.env.COOKIES_JSON)
+    );
   }
 
-  const message = body.message;
-  if (!message || !message.text) return res.sendStatus(200);
-
-  const chatId = message.chat.id;
-  const text = message.text.trim();
-
-  if (text === "/test") {
-    await sendTelegram("✅ Botul funcționează corect!", chatId);
+  if (fs.existsSync(COOKIE_FILE)) {
+    console.log("🍪 Cookie încărcat din fișier");
+    const raw = fs.readFileSync(COOKIE_FILE, "utf8");
+    return tough.CookieJar.deserializeSync(JSON.parse(raw));
   }
 
-  if (text === "/check") {
-    if (fs.existsSync(COOKIE_FILE)) {
-      const cookieFile = JSON.parse(fs.readFileSync(COOKIE_FILE, "utf8"));
-      const cookies = cookieFile.cookies || [];
-      const cookie2FA = cookies.find(c => c.key === "2faKey");
-
-      if (cookie2FA && cookie2FA.expires) {
-        const expiryDate = new Date(cookie2FA.expires);
-        const now = new Date();
-        const diffMs = expiryDate - now;
-
-        const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-
-        const daysLeft = Math.max(0, days);
-        const hoursLeft = Math.max(0, hours);
-
-        const creationDate = new Date(cookie2FA.creation);
-
-        const ziua = creationDate.getDate().toString().padStart(2, '0');
-        const luna = (creationDate.getMonth() + 1).toString().padStart(2, '0');
-        const anul = creationDate.getFullYear();
-        const ora = creationDate.getHours().toString().padStart(2, '0');
-        const minutul = creationDate.getMinutes().toString().padStart(2, '0');
-        
-        const formatFinal = `${ziua}.${luna}.${anul} ${ora}:${minutul}`;
-
-        await sendTelegram(`🔐 2FA a fost creat pe ${formatFinal} și expiră în ${daysLeft} zile și ${hoursLeft} ore.`, chatId);
-      } else {
-        await sendTelegram("⚠️ Cookie-ul 2FA nu a fost găsit. Probabil nu ai trecut încă prin 2FA.", chatId);
-      }
-    }
-  }
-
-  if (text === "/force2fa") {
-  if (fs.existsSync(COOKIE_FILE)) fs.unlinkSync(COOKIE_FILE);
-
-  await sendTelegram("🔄 Cookie șters. Forțăm 2FA...", chatId);
-
-  login(true)
-    .then(result => {
-      globalClient = result.client;
-    })
-    .catch(err => {
-      sendTelegram(`❌ Eroare la force 2FA: ${err.message}`, chatId);
-    });
+  return new tough.CookieJar();
 }
 
-  if (text.startsWith("/2fa ")) {
-    const code = text.split(" ")[1];
-    if (code && resumeLoginAfter2FA) {
-      clearTimeout(timeoutHandle);
-      saved2FACode = code;
-      pending2FA = false;
-      await sendTelegram("🔐 Cod 2FA primit. Continuăm autentificarea...", chatId);
-      resumeLoginAfter2FA(code);
-    } else {
-      await sendTelegram("⚠️ Nu a fost solicitat un cod 2FA sau codul este invalid.", chatId);
-    }
+async function saveCookies(jar) {
+  if (process.env.COOKIES_JSON) {
+    console.log("⚠️ Nu salvăm cookie deoarece folosim ENV");
+    return;
   }
 
-  if (text.startsWith("/status ")) {
-    const name = text.substring(8).trim();
-    try {
-      const { notes, messageId } = await fetchTableDataFor(name, globalClient, chatId);
+  const serialized = jar.serializeSync();
+  fs.writeFileSync(COOKIE_FILE, JSON.stringify(serialized));
+}
 
-      const total = notes.length;
-      const yellow = notes.filter(n => n.isYellow).length;
-      const white = total - yellow;
+// ---------------- LOGIN ----------------
+async function login(force = false) {
 
-      await editTelegram(messageId, `📊 Status pentru ${name}:\n🟡 Galbene: ${yellow}\n✅ Albe: ${white}\n📦 Total: ${total}`, chatId);
-    } catch (error) {
-      await sendTelegram(`❌ Eroare: ${error.message}`, chatId);
-    }
+  if (!force && process.env.COOKIES_JSON) {
+    console.log("🍪 Folosim cookie din ENV, skip login");
+
+    const jar = loadCookies();
+    const client = wrapper(axios.create({
+      jar,
+      withCredentials: true,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+      }
+    }));
+
+    return { client };
   }
 
-  if (text === "/status") {
-    if (!globalClient) {
-      const result = await login();
-      globalClient = result.client;
-    }
-
-    const colegi = await fetchColegi(globalClient);
-
-    const inlineKeyboard = colegi.map(nume => {
-      return [{ text: nume, callback_data: `status:${nume}` }];
-    });
-
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-      chat_id: chatId,
-      text: "👥 Alege colegul pentru care vrei status:",
-      reply_markup: { inline_keyboard: inlineKeyboard }
-    });
-  }
-
-  res.sendStatus(200); // ⚡️ Închidem rapid și mesajele normale
-});
-
-app.listen(PORT, () => {
-  console.log(`Express server is running on port ${PORT}`);
 });
 
 async function sendTelegram(msg, chatId = TELEGRAM_CHAT_ID) {
