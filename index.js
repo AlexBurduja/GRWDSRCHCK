@@ -214,6 +214,11 @@ async function readLast2FAEmail() {
       host: "imap.gmail.com",
       port: 993,
       tls: true,
+      tlsOptions: {
+        rejectUnauthorized: false
+      },
+      connTimeout: 10000,
+      authTimeout: 5000
     });
 
     imap.once("ready", () => {
