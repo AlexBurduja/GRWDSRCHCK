@@ -249,16 +249,26 @@ async function readLast2FAEmail() {
       tlsOptions: { rejectUnauthorized: false }
     });
 
+    // prevenim crash la ECONNRESET
+    imap.on("error", (err) => {
+      console.log("IMAP error (ignored):", err.message);
+    });
+
     imap.once("ready", () => {
       imap.openBox("INBOX", false, (err, box) => {
+        if (err) {
+          console.log("IMAP openBox error:", err);
+          imap.end();
+          return resolve(null);
+        }
+
         imap.search(["ALL"], (err, results) => {
           if (!results || !results.length) {
-            imap.end();
+            setTimeout(() => imap.end(), 300);
             return resolve(null);
           }
 
-          const last = results.slice(-3);
-
+          const last = results.slice(-3); // ultimele 3 mailuri
           const f = imap.fetch(last, { bodies: "" });
 
           let found = null;
@@ -267,21 +277,33 @@ async function readLast2FAEmail() {
           f.on("message", (msg) => {
             msg.on("body", (stream) => {
               simpleParser(stream, async (err, parsed) => {
-                const text = parsed.text || "";
+                try {
+                  const text = parsed?.text || "";
 
-                const match = text.match(/Cod verificare\s*:\s*([A-Z0-9]+)/i);
+                  const match = text.match(/Cod verificare\s*:\s*([A-Z0-9]+)/i);
 
-                if (match && !found) {
-                  found = match[1];
+                  if (match && !found) {
+                    console.log("✅ Cod 2FA găsit:", match[1]);
+                    found = match[1];
+                  }
+                } catch (e) {
+                  console.log("Parser error:", e.message);
                 }
 
                 pending--;
+
                 if (pending === 0) {
-                  imap.end();
-                  resolve(found);
+                  setTimeout(() => {
+                    imap.end();
+                    resolve(found);
+                  }, 300);
                 }
               });
             });
+          });
+
+          f.once("error", (err) => {
+            console.log("Fetch error:", err.message);
           });
         });
       });
