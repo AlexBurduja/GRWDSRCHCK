@@ -270,10 +270,11 @@ async function downloadFromGist() {
 }
 
 function loadCookies() {
-  if (fs.existsSync(COOKIE_FILE)) {
-    console.log("🍪 Cookie încărcat din cookies.json");
-    const raw = fs.readFileSync(COOKIE_FILE, "utf8");
-    return tough.CookieJar.deserializeSync(JSON.parse(raw));
+  if (process.env.COOKIES_JSON) {
+    console.log("📦 Cookie încărcat din ENV");
+    return tough.CookieJar.deserializeSync(
+      JSON.parse(process.env.COOKIES_JSON)
+    );
   }
 
   if (process.env.COOKIES_JSON) {
