@@ -397,8 +397,6 @@ async function downloadFromGist() {
 }
 
 function loadCookies() {
-  return new tough.CookieJar();
-  
   if (fs.existsSync(COOKIE_FILE)) {
     console.log("🍪 Cookie încărcat din cookies.json");
     const raw = fs.readFileSync(COOKIE_FILE, "utf8");
@@ -517,61 +515,69 @@ async function login(force = false) {
     },
   });
 
-  if (response.data.includes("TextBoxCode")) {
-    console.log("📩 Cod 2FA necesar – aștept prin Telegram...");
-    await sendTelegram("📩 Cod 2FA necesar. Încerc auto-login din Gmail...");
-    pending2FA = true;
-    
-    (async () => {
-      const code = await waitFor2FACode();
-    
-      if (code && resumeLoginAfter2FA) {
-        pending2FA = false;
-        clearTimeout(timeoutHandle);
-        resumeLoginAfter2FA(code);
-      }
-    })();
+ if (response.data.includes("TextBoxCode")) {
+  console.log("📩 Cod 2FA necesar – auto Gmail...");
+  await sendTelegram("📩 Cod 2FA necesar. Încerc auto-login din Gmail...");
+  pending2FA = true;
 
-    return await new Promise((resolve, reject) => {
-      timeoutHandle = setTimeout(async () => {
-        await sendTelegram("⏱️ Timpul de 10 minute pentru 2FA a expirat. Botul se va opri.");
-        process.exit(1);
-      }, 10 * 60 * 1000);
+  return await new Promise((resolve, reject) => {
+    timeoutHandle = setTimeout(async () => {
+      await sendTelegram("⏱️ Timpul de 10 minute pentru 2FA a expirat. Botul se va opri.");
+      process.exit(1);
+    }, 10 * 60 * 1000);
 
-      resumeLoginAfter2FA = async (code) => {
-        const $$ = cheerio.load(response.data);
-        const codePayload = {
-          __VIEWSTATE: $$('input#__VIEWSTATE').val(),
-          __VIEWSTATEGENERATOR: $$('input#__VIEWSTATEGENERATOR').val(),
-          __EVENTVALIDATION: $$('input#__EVENTVALIDATION').val(),
-          __EVENTTARGET: "",
-          __EVENTARGUMENT: "",
-          Hidden_ClientJS: $$('input#Hidden_ClientJS').val() || "",
-          TextBoxCode: code,
-          CheckBoxDevice: "on",
-          ButtonLogin: "Autentificare",
-        };
+    resumeLoginAfter2FA = async (code) => {
+      const $$ = cheerio.load(response.data);
 
-        const finalResponse = await client.post(LOGIN_URL, qs.stringify(codePayload), {
+      const codePayload = {
+        __VIEWSTATE: $$('input#__VIEWSTATE').val(),
+        __VIEWSTATEGENERATOR: $$('input#__VIEWSTATEGENERATOR').val(),
+        __EVENTVALIDATION: $$('input#__EVENTVALIDATION').val(),
+        __EVENTTARGET: "",
+        __EVENTARGUMENT: "",
+        Hidden_ClientJS: $$('input#Hidden_ClientJS').val() || "",
+        TextBoxCode: code,
+        CheckBoxDevice: "on",
+        ButtonLogin: "Autentificare",
+      };
+
+      const finalResponse = await client.post(
+        LOGIN_URL,
+        qs.stringify(codePayload),
+        {
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
             Referer: LOGIN_URL,
             Origin: BASE_URL,
           },
-        });
-
-        if (finalResponse.data.includes("TextBoxPass")) {
-          await sendTelegram("❌ Cod 2FA incorect sau autentificare eșuată.");
-          throw new Error("Autentificare eșuată după 2FA");
         }
+      );
 
-        clearTimeout(timeoutHandle);
-        await sendTelegram("✅ Autentificare reușită după 2FA!");
-        saveCookies(jar);
-        resolve({ client });
-      };
-    });
-  }
+      if (finalResponse.data.includes("TextBoxPass")) {
+        await sendTelegram("❌ Cod 2FA incorect sau autentificare eșuată.");
+        throw new Error("Autentificare eșuată după 2FA");
+      }
+
+      clearTimeout(timeoutHandle);
+      pending2FA = false;
+
+      await sendTelegram("✅ Autentificare reușită după 2FA!");
+      saveCookies(jar);
+
+      resolve({ client });
+    };
+
+    // AUTO 2FA
+    (async () => {
+      const code = await waitFor2FACode();
+
+      if (code && resumeLoginAfter2FA) {
+        console.log("🤖 Auto 2FA:", code);
+        resumeLoginAfter2FA(code);
+      }
+    })();
+  });
+}
 
   if (response.data.includes("TextBoxPass")) throw new Error("❌ Autentificare eșuată.");
 
