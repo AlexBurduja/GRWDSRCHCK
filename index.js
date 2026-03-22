@@ -212,22 +212,7 @@ app.listen(PORT, () => {
   console.log(`Express server is running on port ${PORT}`);
 });
 
-async function readLast2FAEmail() {
-  return new Promise((resolve) => {
-    const imap = new Imap({
-      user: process.env.GMAIL_USER,
-      password: process.env.GMAIL_PASS,
-      host: "imap.gmail.com",
-      port: 993,
-      tls: true,
-      tlsOptions: {
-        rejectUnauthorized: false
-      },
-      connTimeout: 10000,
-      authTimeout: 5000
-    });
-
-    async function testGmailConnection() {
+async function testGmailConnection() {
   return new Promise((resolve) => {
     const imap = new Imap({
       user: process.env.GMAIL_USER,
@@ -252,6 +237,22 @@ async function readLast2FAEmail() {
     imap.connect();
   });
 }
+
+async function readLast2FAEmail() {
+  return new Promise((resolve) => {
+    const imap = new Imap({
+      user: process.env.GMAIL_USER,
+      password: process.env.GMAIL_PASS,
+      host: "imap.gmail.com",
+      port: 993,
+      tls: true,
+      tlsOptions: {
+        rejectUnauthorized: false
+      },
+      connTimeout: 10000,
+      authTimeout: 5000
+    });
+
 
     imap.once("ready", () => {
       imap.openBox("INBOX", false, () => {
