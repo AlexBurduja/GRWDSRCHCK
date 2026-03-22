@@ -257,33 +257,31 @@ async function readLast2FAEmail() {
             return resolve(null);
           }
 
-          const last = results.slice(-3) // ultimele 10 mailuri
+          const last = results.slice(-3);
 
           const f = imap.fetch(last, { bodies: "" });
 
           let found = null;
+          let pending = last.length;
 
           f.on("message", (msg) => {
             msg.on("body", (stream) => {
               simpleParser(stream, async (err, parsed) => {
                 const text = parsed.text || "";
-                const subject = parsed.subject || "";
 
                 const match = text.match(/Cod verificare\s*:\s*([A-Z0-9]+)/i);
-console.log("text", text)
-console.log("subject", subject)
-console.log("match", match)
+
                 if (match && !found) {
-                  console.log("✅ Cod găsit în mail:", subject);
                   found = match[1];
+                }
+
+                pending--;
+                if (pending === 0) {
+                  imap.end();
+                  resolve(found);
                 }
               });
             });
-          });
-
-          f.once("end", () => {
-            imap.end();
-            resolve(found);
           });
         });
       });
