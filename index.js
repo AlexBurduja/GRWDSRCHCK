@@ -43,7 +43,7 @@ const MONITORED_LIQUIDATORS = [
   ///{ id: "51", name: "Bucur Mihai", enabled: true },
   ///{ id: "16", name: "Balta Dan", enabled: true },
   ///{ id: "89", name: "Maianu Marian", enabled: true },
-  { id : "0", name: "--- Toti ---", enabled: true }, 
+  // { id : "0", name: "--- Toti ---", enabled: true }, 
 ];
 
 app.use(express.json());
@@ -331,6 +331,11 @@ async function loadNotesFromGist(inspectorId) {
 }
 
 async function login(force = false) {
+  if (pending2FA) {
+    console.log("⏳ Deja așteptăm 2FA...");
+    return { client: globalClient };
+  }
+  
   const jar = await loadCookies();
   globalCookieJar = jar;
   const client = wrapper(axios.create({ jar, withCredentials: true }));
