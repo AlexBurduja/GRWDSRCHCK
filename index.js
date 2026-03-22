@@ -212,6 +212,26 @@ app.listen(PORT, () => {
   console.log(`Express server is running on port ${PORT}`);
 });
 
+async function waitFor2FACode() {
+  const maxAttempts = 120; // 120 * 5s = 10 minute
+  const delay = 5000;
+
+  for (let i = 0; i < maxAttempts; i++) {
+    console.log(`📬 Verific Gmail... încercarea ${i + 1}/${maxAttempts}`);
+
+    const code = await readLast2FAEmail();
+
+    if (code) {
+      console.log("✅ Cod 2FA găsit automat:", code);
+      return code;
+    }
+
+    await new Promise(r => setTimeout(r, delay));
+  }
+
+  return null;
+}
+
 async function testGmailConnection() {
   return new Promise((resolve) => {
     const imap = new Imap({
@@ -375,6 +395,8 @@ async function downloadFromGist() {
 }
 
 function loadCookies() {
+  return new tough.CookieJar();
+  
   if (fs.existsSync(COOKIE_FILE)) {
     console.log("🍪 Cookie încărcat din cookies.json");
     const raw = fs.readFileSync(COOKIE_FILE, "utf8");
@@ -495,9 +517,18 @@ async function login(force = false) {
 
   if (response.data.includes("TextBoxCode")) {
     console.log("📩 Cod 2FA necesar – aștept prin Telegram...");
-    await sendTelegram("📩 Cod 2FA necesar. Trimite-l cu comanda: /2fa CODUL_TAU");
-
+    await sendTelegram("📩 Cod 2FA necesar. Încerc auto-login din Gmail...");
     pending2FA = true;
+    
+    (async () => {
+      const code = await waitFor2FACode();
+    
+      if (code && resumeLoginAfter2FA) {
+        pending2FA = false;
+        clearTimeout(timeoutHandle);
+        resumeLoginAfter2FA(code);
+      }
+    })();
 
     return await new Promise((resolve, reject) => {
       timeoutHandle = setTimeout(async () => {
