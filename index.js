@@ -118,6 +118,12 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
   }
   }
 
+  if (text === "/testgmail") {
+  await sendTelegram("🔌 Test conexiune Gmail...");
+  const ok = await testGmailConnection();
+  await sendTelegram(ok ? "✅ Gmail OK" : "❌ Gmail FAIL");
+}
+
   if (text === "/check") {
     if (fs.existsSync(COOKIE_FILE)) {
       const cookieFile = JSON.parse(fs.readFileSync(COOKIE_FILE, "utf8"));
@@ -220,6 +226,32 @@ async function readLast2FAEmail() {
       connTimeout: 10000,
       authTimeout: 5000
     });
+
+    async function testGmailConnection() {
+  return new Promise((resolve) => {
+    const imap = new Imap({
+      user: process.env.GMAIL_USER,
+      password: process.env.GMAIL_PASS,
+      host: "imap.gmail.com",
+      port: 993,
+      tls: true,
+      tlsOptions: { rejectUnauthorized: false }
+    });
+
+    imap.once("ready", () => {
+      console.log("✅ IMAP conectat!");
+      imap.end();
+      resolve(true);
+    });
+
+    imap.once("error", (err) => {
+      console.log("❌ IMAP error:", err);
+      resolve(false);
+    });
+
+    imap.connect();
+  });
+}
 
     imap.once("ready", () => {
       imap.openBox("INBOX", false, () => {
