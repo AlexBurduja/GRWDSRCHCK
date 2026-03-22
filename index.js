@@ -213,20 +213,15 @@ app.listen(PORT, () => {
 });
 
 async function waitFor2FACode() {
-  const maxAttempts = 120; // 120 * 5s = 10 minute
-  const delay = 5000;
+  const startTime = Date.now();
+  const maxAttempts = 120;
 
   for (let i = 0; i < maxAttempts; i++) {
-    console.log(`📬 Verific Gmail... încercarea ${i + 1}/${maxAttempts}`);
+    const code = await readLast2FAEmail(startTime);
 
-    const code = await readLast2FAEmail();
+    if (code) return code;
 
-    if (code) {
-      console.log("✅ Cod 2FA găsit automat:", code);
-      return code;
-    }
-
-    await new Promise(r => setTimeout(r, delay));
+    await new Promise(r => setTimeout(r, 5000));
   }
 
   return null;
@@ -258,7 +253,7 @@ async function testGmailConnection() {
   });
 }
 
-async function readLast2FAEmail() {
+async function readLast2FAEmail(afterTime) {
   return new Promise((resolve) => {
     const imap = new Imap({
       user: process.env.GMAIL_USER,
@@ -288,7 +283,7 @@ async function readLast2FAEmail() {
             return resolve(null);
           }
 
-          const last = results.slice(-3); // ultimele 3 mailuri
+          const last = results.slice(-5); // ultimele 5 mailuri
           const f = imap.fetch(last, { bodies: "" });
 
           let found = null;
@@ -299,13 +294,20 @@ async function readLast2FAEmail() {
               simpleParser(stream, async (err, parsed) => {
                 try {
                   const text = parsed?.text || "";
+                  const mailDate = new Date(parsed?.date || 0).getTime();
 
-                  const match = text.match(/Cod verificare\s*:\s*([A-Z0-9]+)/i);
+                  // ignorăm mailuri vechi
+                  if (mailDate > afterTime) {
+                    const match = text.match(/Cod verificare\s*:\s*([A-Z0-9]+)/i);
 
-                  if (match && !found) {
-                    console.log("✅ Cod 2FA găsit:", match[1]);
-                    found = match[1];
+                    if (match && !found) {
+                      console.log("✅ Cod 2FA găsit:", match[1]);
+                      found = match[1];
+                    }
+                  } else {
+                    console.log("⏭️ Mail ignorat (prea vechi)");
                   }
+
                 } catch (e) {
                   console.log("Parser error:", e.message);
                 }
