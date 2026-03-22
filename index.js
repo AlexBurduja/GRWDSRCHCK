@@ -257,7 +257,7 @@ async function readLast2FAEmail() {
             return resolve(null);
           }
 
-          const last = results.slice(-10); // ultimele 10 mailuri
+          const last = results.slice(-3) // ultimele 10 mailuri
 
           const f = imap.fetch(last, { bodies: "" });
 
