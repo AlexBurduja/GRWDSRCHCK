@@ -1,6 +1,7 @@
 require("dotenv").config();
 
-
+const Imap = require("imap");
+const { simpleParser } = require("mailparser");
 const axios = require("axios");
 const cheerio = require("cheerio");
 const qs = require("qs");
@@ -106,6 +107,17 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
     await sendTelegram("✅ Botul funcționează corect!", chatId);
   }
 
+  if (text === "/readmail") {
+  await sendTelegram("📬 Verific Gmail...");
+  const code = await readLast2FAEmail();
+
+  if (code) {
+    await sendTelegram(`✅ Cod găsit: ${code}`);
+  } else {
+    await sendTelegram("❌ Nu am găsit cod.");
+  }
+  }
+
   if (text === "/check") {
     if (fs.existsSync(COOKIE_FILE)) {
       const cookieFile = JSON.parse(fs.readFileSync(COOKIE_FILE, "utf8"));
@@ -193,6 +205,49 @@ app.post(`/webhook/${TELEGRAM_TOKEN}`, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Express server is running on port ${PORT}`);
 });
+
+async function readLast2FAEmail() {
+  return new Promise((resolve) => {
+    const imap = new Imap({
+      user: process.env.GMAIL_USER,
+      password: process.env.GMAIL_PASS,
+      host: "imap.gmail.com",
+      port: 993,
+      tls: true,
+    });
+
+    imap.once("ready", () => {
+      imap.openBox("INBOX", false, () => {
+        imap.search(["ALL"], (err, results) => {
+          if (!results || !results.length) {
+            imap.end();
+            return resolve(null);
+          }
+
+          const last = results.slice(-1);
+
+          const f = imap.fetch(last, { bodies: "" });
+
+          f.on("message", (msg) => {
+            msg.on("body", (stream) => {
+              simpleParser(stream, async (err, parsed) => {
+                const text = parsed.text || "";
+                console.log("📧 Ultimul mail:", text);
+
+                const match = text.match(/\b\d{6}\b/);
+                imap.end();
+
+                resolve(match ? match[0] : null);
+              });
+            });
+          });
+        });
+      });
+    });
+
+    imap.connect();
+  });
+}
 
 async function sendTelegram(msg, chatId = TELEGRAM_CHAT_ID) {
   try {
