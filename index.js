@@ -246,17 +246,16 @@ async function readLast2FAEmail() {
       host: "imap.gmail.com",
       port: 993,
       tls: true,
-      tlsOptions: {
-        rejectUnauthorized: false
-      },
-      connTimeout: 10000,
-      authTimeout: 5000
+      tlsOptions: { rejectUnauthorized: false }
     });
 
-
     imap.once("ready", () => {
-      imap.openBox("INBOX", false, () => {
-        imap.search(["UNSEEN", ["FROM", "grawe"], ["SUBJECT", "autentificare"]], (err, results) => {
+      imap.openBox("INBOX", false, (err, box) => {
+        console.log("📬 Total mailuri:", box.messages.total);
+
+        imap.search(["ALL"], (err, results) => {
+          console.log("📬 Results length:", results?.length);
+
           if (!results || !results.length) {
             imap.end();
             return resolve(null);
@@ -269,13 +268,11 @@ async function readLast2FAEmail() {
           f.on("message", (msg) => {
             msg.on("body", (stream) => {
               simpleParser(stream, async (err, parsed) => {
-                const text = parsed.text || "";
-                console.log("📧 BODY:", text);
+                console.log("📧 SUBJECT:", parsed.subject);
+                console.log("📧 TEXT:", parsed.text);
 
-                const match = text.match(/Cod verificare\s*:\s*([A-Z0-9]+)/i);
                 imap.end();
-
-                resolve(match ? match[1] : null);
+                resolve("ok");
               });
             });
           });
