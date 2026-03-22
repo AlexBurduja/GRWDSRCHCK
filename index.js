@@ -223,7 +223,7 @@ async function readLast2FAEmail() {
 
     imap.once("ready", () => {
       imap.openBox("INBOX", false, () => {
-        imap.search(["ALL"], (err, results) => {
+        imap.search(["UNSEEN", ["FROM", "grawe"], ["SUBJECT", "autentificare"]], (err, results) => {
           if (!results || !results.length) {
             imap.end();
             return resolve(null);
@@ -237,12 +237,12 @@ async function readLast2FAEmail() {
             msg.on("body", (stream) => {
               simpleParser(stream, async (err, parsed) => {
                 const text = parsed.text || "";
-                console.log("📧 Ultimul mail:", text);
+                console.log("📧 BODY:", text);
 
-                const match = text.match(/\b\d{6}\b/);
+                const match = text.match(/Cod verificare\s*:\s*([A-Z0-9]+)/i);
                 imap.end();
 
-                resolve(match ? match[0] : null);
+                resolve(match ? match[1] : null);
               });
             });
           });
