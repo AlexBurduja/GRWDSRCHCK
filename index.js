@@ -270,7 +270,9 @@ async function readLast2FAEmail() {
                 const subject = parsed.subject || "";
 
                 const match = text.match(/Cod verificare\s*:\s*([A-Z0-9]+)/i);
-
+console.log("text", text)
+console.log("subject", subject)
+console.log("match", match)
                 if (match && !found) {
                   console.log("✅ Cod găsit în mail:", subject);
                   found = match[1];
