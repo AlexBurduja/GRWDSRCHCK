@@ -414,6 +414,7 @@ async function loadCookies() {
   return await downloadFromGist();
 }
 
+
 async function saveCookies(jar) {
   const serialized = jar.serializeSync();
   const raw = JSON.stringify(serialized);
