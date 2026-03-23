@@ -396,7 +396,7 @@ async function downloadFromGist() {
   }
 }
 
-function loadCookies() {
+async function loadCookies() {
   if (fs.existsSync(COOKIE_FILE)) {
     console.log("🍪 Cookie încărcat din cookies.json");
     const raw = fs.readFileSync(COOKIE_FILE, "utf8");
@@ -411,7 +411,7 @@ function loadCookies() {
   }
 
   console.log("🔍 Încercăm descărcarea din Gist...");
-  return downloadFromGist();
+  return await downloadFromGist();
 }
 
 async function saveCookies(jar) {
