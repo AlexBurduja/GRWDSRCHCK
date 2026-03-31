@@ -478,7 +478,7 @@ async function login(force = false) {
     return { client: globalClient };
   }
   
-  const jar = await loadCookies();
+  const jar = force ? new tough.CookieJar() : await loadCookies();
   globalCookieJar = jar;
   const client = wrapper(axios.create({ jar, withCredentials: true }));
 
