@@ -473,13 +473,15 @@ async function loadNotesFromGist(inspectorId) {
 }
 
 async function login(force = false) {
+
   if (pending2FA) {
     console.log("⏳ Deja așteptăm 2FA...");
     return { client: globalClient };
   }
-  
+
   const jar = force ? new tough.CookieJar() : await loadCookies();
   globalCookieJar = jar;
+
   const client = wrapper(axios.create({ jar, withCredentials: true }));
 
   if (!force) {
@@ -580,7 +582,13 @@ async function login(force = false) {
   });
 }
 
-  if (response.data.includes("TextBoxPass")) throw new Error("❌ Autentificare eșuată.");
+  if (response.data.includes("TextBoxPass")) {
+  if (!force) {
+    console.log("🔁 Login eșuat. Încerc fără cookies...");
+    return await login(true);
+  }
+  throw new Error("❌ Autentificare eșuată.");
+}
 
   console.log("✅ Autentificare reușită!");
   saveCookies(jar);
