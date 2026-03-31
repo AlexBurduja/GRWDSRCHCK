@@ -473,15 +473,13 @@ async function loadNotesFromGist(inspectorId) {
 }
 
 async function login(force = false) {
-
   if (pending2FA) {
     console.log("⏳ Deja așteptăm 2FA...");
     return { client: globalClient };
   }
-
-  const jar = force ? new tough.CookieJar() : await loadCookies();
+  
+  const jar = await loadCookies();
   globalCookieJar = jar;
-
   const client = wrapper(axios.create({ jar, withCredentials: true }));
 
   if (!force) {
@@ -511,16 +509,12 @@ async function login(force = false) {
   };
 
   let response = await client.post(LOGIN_URL, qs.stringify(payload), {
-  headers: {
-    "Content-Type": "application/x-www-form-urlencoded",
-    Referer: LOGIN_URL,
-    Origin: BASE_URL,
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
-    "Connection": "keep-alive"
-  },
-});
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Referer: LOGIN_URL,
+      Origin: BASE_URL,
+    },
+  });
 
  if (response.data.includes("TextBoxCode")) {
   console.log("📩 Cod 2FA necesar – auto Gmail...");
@@ -549,20 +543,16 @@ async function login(force = false) {
       };
 
       const finalResponse = await client.post(
-  LOGIN_URL,
-  qs.stringify(codePayload),
-  {
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Referer: LOGIN_URL,
-      Origin: BASE_URL,
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
-      "Connection": "keep-alive"
-    },
-  }
-);
+        LOGIN_URL,
+        qs.stringify(codePayload),
+        {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Referer: LOGIN_URL,
+            Origin: BASE_URL,
+          },
+        }
+      );
 
       if (finalResponse.data.includes("TextBoxPass")) {
         await sendTelegram("❌ Cod 2FA incorect sau autentificare eșuată.");
@@ -590,13 +580,7 @@ async function login(force = false) {
   });
 }
 
-  if (response.data.includes("TextBoxPass")) {
-  if (!force) {
-    console.log("🔁 Login eșuat. Încerc fără cookies...");
-    return await login(true);
-  }
-  throw new Error("❌ Autentificare eșuată.");
-}
+  if (response.data.includes("TextBoxPass")) throw new Error("❌ Autentificare eșuată.");
 
   console.log("✅ Autentificare reușită!");
   saveCookies(jar);
