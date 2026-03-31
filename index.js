@@ -511,12 +511,16 @@ async function login(force = false) {
   };
 
   let response = await client.post(LOGIN_URL, qs.stringify(payload), {
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Referer: LOGIN_URL,
-      Origin: BASE_URL,
-    },
-  });
+  headers: {
+    "Content-Type": "application/x-www-form-urlencoded",
+    Referer: LOGIN_URL,
+    Origin: BASE_URL,
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
+    "Connection": "keep-alive"
+  },
+});
 
  if (response.data.includes("TextBoxCode")) {
   console.log("📩 Cod 2FA necesar – auto Gmail...");
@@ -545,16 +549,20 @@ async function login(force = false) {
       };
 
       const finalResponse = await client.post(
-        LOGIN_URL,
-        qs.stringify(codePayload),
-        {
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            Referer: LOGIN_URL,
-            Origin: BASE_URL,
-          },
-        }
-      );
+  LOGIN_URL,
+  qs.stringify(codePayload),
+  {
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Referer: LOGIN_URL,
+      Origin: BASE_URL,
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
+      "Connection": "keep-alive"
+    },
+  }
+);
 
       if (finalResponse.data.includes("TextBoxPass")) {
         await sendTelegram("❌ Cod 2FA incorect sau autentificare eșuată.");
