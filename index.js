@@ -591,7 +591,7 @@ async function fetchTableData(client, retry = true) {
   const response = await client.get(TARGET_URL);
   const $ = cheerio.load(response.data);
 
-  const table = $("#ctl00_ContentPlaceHolderMain_TabContainer_MAIN_TabPanel_APPROVAL_LIST_GridViewApprovalList");
+  const table = $("#ContentPlaceHolderMain_TabContainer_MAIN_TabPanel_APPROVAL_LIST_GridViewApprovalList");
   if (!table.length) {
     console.warn("❌ Table not found.");
     if (retry) {
