@@ -691,7 +691,7 @@ async function fetchTableDataFor(name, client) {
   });
 
   const $$ = cheerio.load(postResponse.data);
-  const table = $$("table#ctl00_ContentPlaceHolderMain_TabContainer_MAIN_TabPanel_APPROVAL_LIST_GridViewApprovalList");
+  const table = $$("table#ContentPlaceHolderMain_TabContainer_MAIN_TabPanel_APPROVAL_LIST_GridViewApprovalList");
 
   if (!table.length) {
     throw new Error(`❌ Nu am găsit tabelul după filtrare pentru ${name}.`);
